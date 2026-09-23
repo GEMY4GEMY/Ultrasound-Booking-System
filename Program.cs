@@ -5,7 +5,21 @@ var builder=WebApplication.CreateBuilder(args);builder.WebHost.UseUrls("http://0
 var dir=Path.Combine(AppContext.BaseDirectory,"data");Directory.CreateDirectory(dir);
 string B=Path.Combine(dir,"bookings.json"),U=Path.Combine(dir,"users.json"),D=Path.Combine(dir,"doctors.json"),E=Path.Combine(dir,"exams.json"),A=Path.Combine(dir,"activity.json");
 Init(B,"[]");Init(D,JsonSerializer.Serialize(new[]{"Dr. Ahmed","Dr. Mohamed"}));Init(E,JsonSerializer.Serialize(new[]{"Abdominal Ultrasound","Pelvic Ultrasound","Doppler","Echocardiography"}));Init(A,"[]");
-if(!File.Exists(U))File.WriteAllText(U,JsonSerializer.Serialize(new[]{new User{username="admin",password=Hash("admin123"),name="Administrator",role="Super Admin",permissions=new[]{"bookings.view","bookings.add","bookings.edit","bookings.delete","users.manage","masters.manage","backup","reports"}}));
+if(!File.Exists(U))
+{
+    var initialUsers = new List<User>
+    {
+        new User
+        {
+            username = "admin",
+            password = Hash("admin123"),
+            name = "Administrator",
+            role = "Super Admin",
+            permissions = new[] { "bookings.view", "bookings.add", "bookings.edit", "bookings.delete", "users.manage", "masters.manage", "backup", "reports" }
+        }
+    };
+    File.WriteAllText(U, JsonSerializer.Serialize(initialUsers));
+}
 app.UseDefaultFiles();app.UseStaticFiles();
 app.MapPost("/api/login",async(HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<Login>(r.Body);var us=Read<User>(U);var u=us.FirstOrDefault(z=>x!=null&&z.username.Equals(x.username,StringComparison.OrdinalIgnoreCase)&&z.password==Hash(x.password));if(u==null)return Results.Unauthorized(); return Results.Ok(new { username=u.username, name=u.name, role=u.role, permissions=u.permissions });});
 app.MapGet("/api/bookings",()=>Json(Read<Booking>(B)));app.MapPost("/api/bookings",async(HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<Booking>(r.Body);if(x==null)return Results.BadRequest();var a=Read<Booking>(B);x.id=Guid.NewGuid().ToString("N")[..8].ToUpper();x.createdAt=x.updatedAt=DateTime.Now;a.Add(x);Write(B,a);Log(x.bookedBy,"ADD BOOKING",x.id+" - "+x.patientName);return Results.Ok(x);});

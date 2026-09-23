@@ -1,10 +1,8 @@
 name: Windows x64 Build
-
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: windows-latest
@@ -18,3 +16,10 @@ jobs:
         run: dotnet restore
       - name: Build
         run: dotnet build --configuration Release --no-restore
+      - name: Publish Windows x64
+        run: dotnet publish --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output publish
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ultrasound-Booking-System-Windows-x64
+          path: publish

@@ -1,43 +1,27 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-
-var builder = WebApplication.CreateBuilder(args);
-builder.WebHost.UseUrls("http://0.0.0.0:5090");
-var app = builder.Build();
-var root = AppContext.BaseDirectory;
-var dataDir = Path.Combine(root,"data"); Directory.CreateDirectory(dataDir);
-var db = Path.Combine(dataDir,"bookings.json");
-var users = Path.Combine(dataDir,"users.json");
-if(!File.Exists(db)) File.WriteAllText(db,"[]");
-if(!File.Exists(users)) File.WriteAllText(users, JsonSerializer.Serialize(new[]{new {username="admin",password=Hash("admin123"),role="Admin",name="Administrator"}}));
-app.UseDefaultFiles(); app.UseStaticFiles();
-
-app.MapPost("/api/login", async (HttpRequest req)=>{
- var x=await JsonSerializer.DeserializeAsync<Login>(req.Body); if(x is null) return Results.BadRequest();
- var us=JsonSerializer.Deserialize<List<User>>(File.ReadAllText(users))??[];
- var u=us.FirstOrDefault(a=>a.username.Equals(x.username,StringComparison.OrdinalIgnoreCase)&&a.password==Hash(x.password));
- return u is null?Results.Unauthorized():Results.Ok(new{u.username,u.role,u.name});
-});
-app.MapGet("/api/bookings",()=>Results.Text(File.ReadAllText(db),"application/json"));
-app.MapPost("/api/bookings", async (HttpRequest req)=>{
- var b=await JsonSerializer.DeserializeAsync<Booking>(req.Body); if(b is null)return Results.BadRequest();
- var list=JsonSerializer.Deserialize<List<Booking>>(File.ReadAllText(db))??[];
- b.id=Guid.NewGuid().ToString("N")[..8].ToUpper(); b.createdAt=DateTime.Now; b.updatedAt=DateTime.Now;
- list.Add(b); Save(list); return Results.Ok(b);
-});
-app.MapPut("/api/bookings/{id}", async (string id,HttpRequest req)=>{
- var b=await JsonSerializer.DeserializeAsync<Booking>(req.Body); var list=JsonSerializer.Deserialize<List<Booking>>(File.ReadAllText(db))??[];
- var i=list.FindIndex(x=>x.id==id); if(i<0||b is null)return Results.NotFound();
- b.id=id;b.createdAt=list[i].createdAt;b.updatedAt=DateTime.Now;list[i]=b;Save(list);return Results.Ok(b);
-});
-app.MapDelete("/api/bookings/{id}",(string id)=>{
- var list=JsonSerializer.Deserialize<List<Booking>>(File.ReadAllText(db))??[]; var n=list.RemoveAll(x=>x.id==id);Save(list);return n>0?Results.Ok():Results.NotFound();
-});
-app.MapGet("/api/backup",()=>{var p=Path.Combine(dataDir,$"backup_{DateTime.Now:yyyyMMdd_HHmmss}.json");File.Copy(db,p);return Results.Ok(new{file=Path.GetFileName(p)});});
-app.Run();
-void Save(List<Booking> x)=>File.WriteAllText(db,JsonSerializer.Serialize(x,new JsonSerializerOptions{WriteIndented=true}));
+var builder=WebApplication.CreateBuilder(args);builder.WebHost.UseUrls("http://0.0.0.0:5090");var app=builder.Build();
+var dir=Path.Combine(AppContext.BaseDirectory,"data");Directory.CreateDirectory(dir);
+string B=Path.Combine(dir,"bookings.json"),U=Path.Combine(dir,"users.json"),D=Path.Combine(dir,"doctors.json"),E=Path.Combine(dir,"exams.json"),A=Path.Combine(dir,"activity.json");
+Init(B,"[]");Init(D,JsonSerializer.Serialize(new[]{"Dr. Ahmed","Dr. Mohamed"}));Init(E,JsonSerializer.Serialize(new[]{"Abdominal Ultrasound","Pelvic Ultrasound","Doppler","Echocardiography"}));Init(A,"[]");
+if(!File.Exists(U))File.WriteAllText(U,JsonSerializer.Serialize(new[]{new User{username="admin",password=Hash("admin123"),name="Administrator",role="Super Admin",permissions=new[]{"bookings.view","bookings.add","bookings.edit","bookings.delete","users.manage","masters.manage","backup","reports"}}));
+app.UseDefaultFiles();app.UseStaticFiles();
+app.MapPost("/api/login",async(HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<Login>(r.Body);var us=Read<User>(U);var u=us.FirstOrDefault(z=>x!=null&&z.username.Equals(x.username,StringComparison.OrdinalIgnoreCase)&&z.password==Hash(x.password));return u==null?Results.Unauthorized():Results.Ok(new{u.username,u.name,u.role,u.permissions});});
+app.MapGet("/api/bookings",()=>Json(Read<Booking>(B)));app.MapPost("/api/bookings",async(HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<Booking>(r.Body);if(x==null)return Results.BadRequest();var a=Read<Booking>(B);x.id=Guid.NewGuid().ToString("N")[..8].ToUpper();x.createdAt=x.updatedAt=DateTime.Now;a.Add(x);Write(B,a);Log(x.bookedBy,"ADD BOOKING",x.id+" - "+x.patientName);return Results.Ok(x);});
+app.MapPut("/api/bookings/{id}",async(string id,HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<Booking>(r.Body);var a=Read<Booking>(B);var i=a.FindIndex(z=>z.id==id);if(x==null||i<0)return Results.NotFound();x.id=id;x.createdAt=a[i].createdAt;x.updatedAt=DateTime.Now;a[i]=x;Write(B,a);Log(x.modifiedBy,"EDIT BOOKING",id+" - "+x.patientName);return Results.Ok(x);});
+app.MapDelete("/api/bookings/{id}",(string id,string user)=>{var a=Read<Booking>(B);var x=a.FirstOrDefault(z=>z.id==id);if(x==null)return Results.NotFound();a.Remove(x);Write(B,a);Log(user,"DELETE BOOKING",id+" - "+x.patientName);return Results.Ok();});
+app.MapGet("/api/users",()=>Json(Read<User>(U).Select(x=>new{x.username,x.name,x.role,x.permissions})));
+app.MapPost("/api/users",async(HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<UserInput>(r.Body);if(x==null||string.IsNullOrWhiteSpace(x.username)||string.IsNullOrWhiteSpace(x.password))return Results.BadRequest();var a=Read<User>(U);if(a.Any(z=>z.username.Equals(x.username,StringComparison.OrdinalIgnoreCase)))return Results.Conflict();a.Add(new User{username=x.username,name=x.name,password=Hash(x.password),role=x.role,permissions=x.permissions??[]});Write(U,a);Log(x.actor,"ADD USER",x.username);return Results.Ok();});
+app.MapDelete("/api/users/{name}",(string name,string actor)=>{if(name=="admin")return Results.BadRequest();var a=Read<User>(U);a.RemoveAll(x=>x.username==name);Write(U,a);Log(actor,"DELETE USER",name);return Results.Ok();});
+app.MapGet("/api/doctors",()=>Json(Read<string>(D)));app.MapPost("/api/doctors",async(HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<Master>(r.Body);if(x==null)return Results.BadRequest();var a=Read<string>(D);if(!a.Contains(x.value,StringComparer.OrdinalIgnoreCase))a.Add(x.value);Write(D,a);Log(x.actor,"ADD DOCTOR",x.value);return Results.Ok();});
+app.MapGet("/api/exams",()=>Json(Read<string>(E)));app.MapPost("/api/exams",async(HttpRequest r)=>{var x=await JsonSerializer.DeserializeAsync<Master>(r.Body);if(x==null)return Results.BadRequest();var a=Read<string>(E);if(!a.Contains(x.value,StringComparer.OrdinalIgnoreCase))a.Add(x.value);Write(E,a);Log(x.actor,"ADD EXAM",x.value);return Results.Ok();});
+app.MapGet("/api/activity",()=>Json(Read<Activity>(A).OrderByDescending(x=>x.time).Take(500)));
+app.MapGet("/api/backup",()=>{var stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dir,"backups",stamp);Directory.CreateDirectory(bd);foreach(var f in new[]{B,U,D,E,A})File.Copy(f,Path.Combine(bd,Path.GetFileName(f)),true);return Results.Ok(new{folder=stamp});});app.Run();
+void Init(string p,string v){if(!File.Exists(p))File.WriteAllText(p,v);}List<T> Read<T>(string p)=>JsonSerializer.Deserialize<List<T>>(File.ReadAllText(p))??[];void Write<T>(string p,IEnumerable<T> x)=>File.WriteAllText(p,JsonSerializer.Serialize(x,new JsonSerializerOptions{WriteIndented=true}));IResult Json(object x)=>Results.Json(x);
+void Log(string user,string action,string detail){var a=Read<Activity>(A);a.Add(new Activity{time=DateTime.Now,user=user,action=action,detail=detail});Write(A,a);}
 static string Hash(string s)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
-record Login(string username,string password);
-record User(string username,string password,string role,string name);
-class Booking {public string id{get;set;}="";public string patientName{get;set;}="";public string exam{get;set;}="";public string doctor{get;set;}="";public DateTime bookingDate{get;set;}public string shift{get;set;}="Morning";public bool papersReceived{get;set;}public string notes{get;set;}="";public string bookedBy{get;set;}="";public string modifiedBy{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
+record Login(string username,string password);record Master(string value,string actor);
+class User{public string username{get;set;}="";public string password{get;set;}="";public string name{get;set;}="";public string role{get;set;}="User";public string[] permissions{get;set;}=[];}class UserInput:User{public string actor{get;set;}="";}
+class Activity{public DateTime time{get;set;}public string user{get;set;}="";public string action{get;set;}="";public string detail{get;set;}="";}
+class Booking{public string id{get;set;}="";public string patientName{get;set;}="";public string exam{get;set;}="";public string doctor{get;set;}="";public DateTime bookingDate{get;set;}public string shift{get;set;}="Morning";public bool papersReceived{get;set;}public string notes{get;set;}="";public string bookedBy{get;set;}="";public string modifiedBy{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}

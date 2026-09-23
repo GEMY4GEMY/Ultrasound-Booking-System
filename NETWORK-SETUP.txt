@@ -1,0 +1,43 @@
+ULTRASOUND BOOKING SYSTEM - NETWORK SETUP
+==========================================
+
+INFO / ABOUT
+MAHMOUD GAMAL
+01019626727
+
+MAIN / SERVER COMPUTER
+----------------------
+1. Extract the Windows x64 build to a normal folder. Do not run it from inside the ZIP file.
+2. Run Setup-Network-Firewall.cmd once. Approve the Windows Administrator prompt.
+3. Run Start-Ultrasound-Server.cmd.
+4. Keep the server computer powered on while the department is using the system.
+5. The launcher shows the local network address, normally similar to:
+   http://192.168.1.20:5090
+
+OTHER COMPUTERS
+---------------
+1. Connect each computer to the same router / local network as the server computer.
+2. Open Microsoft Edge, Google Chrome, or another modern browser.
+3. Enter the address shown by Start-Ultrasound-Server.cmd, for example:
+   http://192.168.1.20:5090
+4. Sign in using an account created by the administrator.
+
+IMPORTANT
+---------
+- Only the main computer runs the server EXE.
+- Other computers normally use the browser and do not need a separate database.
+- Data and backups remain on the server computer.
+- Use a Private Windows network profile for the department LAN.
+- Do not expose port 5090 directly to the public Internet.
+- Change the initial administrator password before routine use.
+- Take regular backups from the Backup screen.
+
+QUICK TEST
+----------
+On the server computer open:
+http://localhost:5090/api/health
+
+On another computer replace localhost with the server IPv4 address:
+http://SERVER-IP:5090/api/health
+
+A working server returns status "ok".

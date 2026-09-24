@@ -18,6 +18,20 @@ jobs:
         run: dotnet build --configuration Release --no-restore
       - name: Publish Windows x64
         run: dotnet publish --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output publish
+      - name: Add network deployment tools
+        shell: powershell
+        run: |
+          Copy-Item "Start-Ultrasound-Server.cmd" "publish\Start-Ultrasound-Server.cmd"
+          Copy-Item "Setup-Network-Firewall.cmd" "publish\Setup-Network-Firewall.cmd"
+          Copy-Item "NETWORK-SETUP.txt" "publish\NETWORK-SETUP.txt"
+      - name: Verify package contents
+        shell: powershell
+        run: |
+          Get-ChildItem publish
+          if (-not (Test-Path "publish\Start-Ultrasound-Server.cmd")) { throw "Server launcher missing" }
+          if (-not (Test-Path "publish\Setup-Network-Firewall.cmd")) { throw "Firewall helper missing" }
+          if (-not (Test-Path "publish\NETWORK-SETUP.txt")) { throw "Network guide missing" }
+          if (-not (Get-ChildItem "publish\*.exe")) { throw "Application EXE missing" }
       - name: Upload test package
         uses: actions/upload-artifact@v4
         with:

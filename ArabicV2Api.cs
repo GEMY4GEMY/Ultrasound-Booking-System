@@ -97,7 +97,7 @@ public static class ArabicV2Api
         });
         app.MapPut("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
             var n=await JsonSerializer.DeserializeAsync<V2Booking>(r.Body);var a=Read<V2Booking>(bookingsFile);var i=a.FindIndex(z=>z.id==id);
-            if(n==null||i<0)return Results.NotFound();if(!System.Text.RegularExpressions.Regex.IsMatch(n.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_phone"});
+            if(n==null||i<0)return Results.NotFound();var sourceList=Read<V2DailyList>(listsFile).FirstOrDefault(z=>z.id==a[i].listId);if(sourceList?.state=="مكتملة")return Results.Conflict(new{error="list_completed"});if(!System.Text.RegularExpressions.Regex.IsMatch(n.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_phone"});
             var old=a[i];var changes=new List<string>();
             if(old.patientName!=n.patientName)changes.Add($"الاسم: {old.patientName} ← {n.patientName}");
             if(old.phone!=n.phone)changes.Add($"الهاتف: {old.phone} ← {n.phone}");
@@ -114,13 +114,13 @@ public static class ArabicV2Api
         });
         app.MapPut("/api/v2/bookings/{id}/status",async(string id,HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2BookingAction>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
-            if(x==null||b==null)return Results.NotFound();var old=b.status;b.status=x.status;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
+            if(x==null||b==null)return Results.NotFound();if(!new[]{"محجوز","تم الحضور","لم يحضر","ملغي"}.Contains(x.status))return Results.BadRequest(new{error="invalid_status"});var source=Read<V2DailyList>(listsFile).FirstOrDefault(z=>z.id==b.listId);if(source?.state=="مكتملة")return Results.Conflict(new{error="list_completed"});var old=b.status;b.status=x.status;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
             Audit(auditFile,x.actor,"تغيير حالة حجز",$"{b.patientId} - {b.patientName}: {old} ← {b.status}",r);return Results.Ok(b);
         });
         app.MapPut("/api/v2/bookings/{id}/move",async(string id,HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2BookingMove>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
             var lists=Read<V2DailyList>(listsFile);var target=x==null?null:lists.FirstOrDefault(z=>z.id==x.listId);
-            if(x==null||b==null||target==null)return Results.NotFound();if(target.state!="مفتوحة")return Results.Conflict(new{error="target_locked"});
+            if(x==null||b==null||target==null)return Results.NotFound();var source=lists.FirstOrDefault(z=>z.id==b.listId);if(source?.state=="مكتملة")return Results.Conflict(new{error="source_completed"});if(target.state!="مفتوحة")return Results.Conflict(new{error="target_locked"});
             var old=$"{b.date:yyyy-MM-dd} - {b.doctor} - {b.shift}";b.listId=target.id;b.date=target.date;b.doctor=target.doctor;b.shift=target.shift;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
             Audit(auditFile,x.actor,"نقل حجز",$"{b.patientId} - {b.patientName}: {old} ← {b.date:yyyy-MM-dd} - {b.doctor} - {b.shift}",r);return Results.Ok(b);
         });

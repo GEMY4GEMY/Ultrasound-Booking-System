@@ -137,7 +137,7 @@ public static class ArabicV2Api
             if(old.exam!=n.exam)changes.Add($"الفحص: {old.exam} ← {n.exam}");
             if(old.contractType!=n.contractType)changes.Add($"التعاقد: {old.contractType} ← {n.contractType}");
             if(old.notes!=n.notes)changes.Add("تم تعديل الملاحظات");
-            n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.status=old.status;n.isDeleted=old.isDeleted;n.deletedAt=old.deletedAt;n.deletedBy=old.deletedBy;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);
+            n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.status=old.status;n.isDeleted=old.isDeleted;n.deletedAt=old.deletedAt;n.deletedBy=old.deletedBy;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);var ps=Read<V2Patient>(patientsFile);var pi=ps.FindIndex(p=>p.patientId.Equals(n.patientId,StringComparison.OrdinalIgnoreCase));if(pi>=0){ps[pi].patientName=n.patientName;ps[pi].phone=n.phone;ps[pi].updatedAt=DateTime.Now;Write(patientsFile,ps);}
             Audit(auditFile,n.actor,"تعديل بيانات",$"{n.patientId} - {n.patientName}: {(changes.Count>0?string.Join(" | ",changes):"بدون تغيير")}",r);return Results.Ok(n);
             }finally{mutationGate.Release();}
         });

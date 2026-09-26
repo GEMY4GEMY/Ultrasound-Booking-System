@@ -12,6 +12,8 @@ public static class ArabicV2Api
         var doctorsFile=Path.Combine(dataDir,"doctors-v2.json");
         var adminFile=Path.Combine(dataDir,"admin-v2.json");
         var settingsFile=Path.Combine(dataDir,"settings-v2.json");
+        var adminTokens=new Dictionary<string,DateTime>();
+        bool IsAdmin(HttpRequest r){var t=r.Headers["X-Admin-Token"].ToString();lock(adminTokens){return !string.IsNullOrWhiteSpace(t)&&adminTokens.TryGetValue(t,out var exp)&&exp>DateTime.Now;}}
         Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]");
         Init(doctorsFile,JsonSerializer.Serialize(new[]{"د. أحمد","د. محمد"}));
         Init(adminFile,JsonSerializer.Serialize(new V2AdminConfig{pinHash=HashPin("1234")}));
@@ -20,29 +22,28 @@ public static class ArabicV2Api
         app.MapPost("/api/v2/admin/login",async(HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2AdminLogin>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
             if(x==null||cfg.pinHash!=HashPin(x.pin))return Results.Unauthorized();
-            Audit(auditFile,x.actor,"دخول لوحة الأدمن","تم فتح لوحة الأدمن",r);return Results.Ok(new{ok=true});
+            var token=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));lock(adminTokens)adminTokens[token]=DateTime.Now.AddHours(8);Audit(auditFile,x.actor,"دخول لوحة الأدمن","تم فتح لوحة الأدمن",r);return Results.Ok(new{ok=true,token});
         });
         app.MapPost("/api/v2/admin/change-pin",async(HttpRequest r)=>{
-            var x=await JsonSerializer.DeserializeAsync<V2AdminPinChange>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
+            if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2AdminPinChange>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
             if(x==null||cfg.pinHash!=HashPin(x.oldPin)||string.IsNullOrWhiteSpace(x.newPin)||x.newPin.Length<4)return Results.BadRequest();
             cfg.pinHash=HashPin(x.newPin);File.WriteAllText(adminFile,JsonSerializer.Serialize(cfg,new JsonSerializerOptions{WriteIndented=true}));
             Audit(auditFile,x.actor,"تغيير PIN الأدمن","تم تغيير رمز لوحة الأدمن",r);return Results.Ok();
         });
-        app.MapDelete("/api/v2/doctors", (string name,string actor,string pin,HttpRequest r)=>{
-            var cfg=ReadOne<V2AdminConfig>(adminFile);if(cfg.pinHash!=HashPin(pin))return Results.Unauthorized();
+        app.MapDelete("/api/v2/doctors", (string name,string actor,HttpRequest r)=>{
+            if(!IsAdmin(r))return Results.Unauthorized();
             var a=Read<string>(doctorsFile);a.RemoveAll(x=>x==name);Write(doctorsFile,a);Audit(auditFile,actor,"حذف طبيب",name,r);return Results.Ok();
         });
-        app.MapPost("/api/v2/admin/backup",(string actor,string pin,HttpRequest r)=>{
-            var cfg=ReadOne<V2AdminConfig>(adminFile);if(cfg.pinHash!=HashPin(pin))return Results.Unauthorized();
+        app.MapPost("/api/v2/admin/backup",(string actor,HttpRequest r)=>{
+            if(!IsAdmin(r))return Results.Unauthorized();
             var stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dataDir,"backups-v2",stamp);Directory.CreateDirectory(bd);
-            foreach(var file in new[]{listsFile,bookingsFile,auditFile,doctorsFile,adminFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
+            foreach(var file in new[]{listsFile,bookingsFile,auditFile,doctorsFile,adminFile,settingsFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
             Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
         });
 
         app.MapGet("/api/v2/settings",()=>Results.Json(ReadOne<V2Settings>(settingsFile)));
         app.MapPost("/api/v2/settings",async(HttpRequest r)=>{
-            var x=await JsonSerializer.DeserializeAsync<V2SettingsUpdate>(r.Body);if(x==null)return Results.BadRequest();
-            var cfg=ReadOne<V2AdminConfig>(adminFile);if(cfg.pinHash!=HashPin(x.pin))return Results.Unauthorized();
+            if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2SettingsUpdate>(r.Body);if(x==null)return Results.BadRequest();
             var s=x.settings??new V2Settings();s.duplicateNameDays=Math.Clamp(s.duplicateNameDays,1,365);s.workingDays=(s.workingDays??[]).Distinct().Where(d=>d>=0&&d<=6).OrderBy(d=>d).ToArray();
             File.WriteAllText(settingsFile,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));
             Audit(auditFile,x.actor,"تعديل إعدادات التشغيل",$"أيام العمل: {string.Join(",",s.workingDays)} - فترة التكرار: {s.duplicateNameDays} يوم",r);return Results.Ok(s);
@@ -50,7 +51,7 @@ public static class ArabicV2Api
 
         app.MapGet("/api/v2/doctors",()=>Results.Json(Read<string>(doctorsFile)));
         app.MapPost("/api/v2/doctors",async(HttpRequest r)=>{
-            var x=await JsonSerializer.DeserializeAsync<V2DoctorInput>(r.Body);
+            if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2DoctorInput>(r.Body);
             if(x==null||string.IsNullOrWhiteSpace(x.name)) return Results.BadRequest();
             var a=Read<string>(doctorsFile); if(!a.Contains(x.name.Trim()))a.Add(x.name.Trim()); Write(doctorsFile,a);
             Audit(auditFile,x.actor,"إضافة طبيب",x.name,r); return Results.Ok();
@@ -133,14 +134,14 @@ public static class ArabicV2Api
             var b=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.phone==phone).OrderByDescending(x=>x.createdAt).FirstOrDefault();
             return b==null?Results.NotFound():Results.Ok(new{b.patientId,b.patientName,b.phone,lastDate=b.date,lastDoctor=b.doctor,lastShift=b.shift,lastExam=b.exam});
         });
-        app.MapGet("/api/v2/audit",()=>Results.Json(Read<V2Audit>(auditFile).OrderByDescending(x=>x.time).Take(1000)));
-        app.MapGet("/api/v2/admin/summary",()=>Results.Ok(new{
+        app.MapGet("/api/v2/audit",(HttpRequest r)=>IsAdmin(r)?Results.Json(Read<V2Audit>(auditFile).OrderByDescending(x=>x.time).Take(1000)):Results.Unauthorized());
+        app.MapGet("/api/v2/admin/summary",(HttpRequest r)=>{if(!IsAdmin(r))return Results.Unauthorized();return Results.Ok(new{
             doctors=Read<string>(doctorsFile).Count,
             lists=Read<V2DailyList>(listsFile).Count,
             bookings=Read<V2Booking>(bookingsFile).Count,
             dataPath=dataDir,
             server=Environment.MachineName
-        }));
+        });});
         app.MapGet("/api/v2/alerts",()=>{
             var lists=Read<V2DailyList>(listsFile);var s=ReadOne<V2Settings>(settingsFile);var today=DateTime.Today;var alerts=new List<V2Alert>();
             var start=s.alertsStartDate==default?(lists.Count>0?lists.Min(x=>x.date.Date):today):s.alertsStartDate.Date;if(start>today)start=today;

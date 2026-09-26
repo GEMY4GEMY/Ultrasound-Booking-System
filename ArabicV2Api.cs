@@ -4,6 +4,7 @@ using System.Text;
 
 public static class ArabicV2Api
 {
+    static readonly object DataLock=new();
     public static void MapArabicV2(this WebApplication app, string dataDir)
     {
         var listsFile=Path.Combine(dataDir,"daily-lists.json");
@@ -27,7 +28,7 @@ public static class ArabicV2Api
         app.MapPost("/api/v2/admin/change-pin",async(HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2AdminPinChange>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
             if(x==null||cfg.pinHash!=HashPin(x.oldPin)||string.IsNullOrWhiteSpace(x.newPin)||x.newPin.Length<4)return Results.BadRequest();
-            cfg.pinHash=HashPin(x.newPin);File.WriteAllText(adminFile,JsonSerializer.Serialize(cfg,new JsonSerializerOptions{WriteIndented=true}));
+            cfg.pinHash=HashPin(x.newPin);lock(DataLock)AtomicWrite(adminFile,JsonSerializer.Serialize(cfg,new JsonSerializerOptions{WriteIndented=true}));
             Audit(auditFile,x.actor,"تغيير PIN الأدمن","تم تغيير رمز لوحة الأدمن",r);return Results.Ok();
         });
         app.MapDelete("/api/v2/doctors", (string name,string actor,HttpRequest r)=>{
@@ -45,7 +46,7 @@ public static class ArabicV2Api
         app.MapPost("/api/v2/settings",async(HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2SettingsUpdate>(r.Body);if(x==null)return Results.BadRequest();
             var s=x.settings??new V2Settings();s.duplicateNameDays=Math.Clamp(s.duplicateNameDays,1,365);s.workingDays=(s.workingDays??[]).Distinct().Where(d=>d>=0&&d<=6).OrderBy(d=>d).ToArray();
-            File.WriteAllText(settingsFile,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));
+            lock(DataLock)AtomicWrite(settingsFile,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));
             Audit(auditFile,x.actor,"تعديل إعدادات التشغيل",$"أيام العمل: {string.Join(",",s.workingDays)} - فترة التكرار: {s.duplicateNameDays} يوم",r);return Results.Ok(s);
         });
 
@@ -157,12 +158,13 @@ public static class ArabicV2Api
         });
     }
     static string NextPatientId(List<V2Booking> a){var n=a.Select(x=>int.TryParse((x.patientId??"").Replace("P",""),out var v)?v:0).DefaultIfEmpty(0).Max()+1;return $"P{n:000000}";}
-    static void Audit(string f,string actor,string action,string detail,HttpRequest r){var a=Read<V2Audit>(f);a.Add(new V2Audit{time=DateTime.Now,actor=string.IsNullOrWhiteSpace(actor)?"غير محدد":actor,action=action,detail=detail,device=r.Headers["User-Agent"].ToString()});Write(f,a);}
+    static void Audit(string f,string actor,string action,string detail,HttpRequest r){lock(DataLock){var a=Read<V2Audit>(f);a.Add(new V2Audit{time=DateTime.Now,actor=string.IsNullOrWhiteSpace(actor)?"غير محدد":actor,action=action,detail=detail,device=r.Headers["User-Agent"].ToString()});Write(f,a);}}
     static string HashPin(string s)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s??"")));
-    static T ReadOne<T>(string p) where T:new()=>JsonSerializer.Deserialize<T>(File.ReadAllText(p))??new T();
-    static void Init(string p,string v){if(!File.Exists(p))File.WriteAllText(p,v);}
-    static List<T> Read<T>(string p)=>JsonSerializer.Deserialize<List<T>>(File.ReadAllText(p))??[];
-    static void Write<T>(string p,IEnumerable<T> x)=>File.WriteAllText(p,JsonSerializer.Serialize(x,new JsonSerializerOptions{WriteIndented=true}));
+    static T ReadOne<T>(string p) where T:new(){lock(DataLock)return JsonSerializer.Deserialize<T>(File.ReadAllText(p))??new T();}
+    static void Init(string p,string v){lock(DataLock){if(!File.Exists(p))File.WriteAllText(p,v);}}
+    static List<T> Read<T>(string p){lock(DataLock)return JsonSerializer.Deserialize<List<T>>(File.ReadAllText(p))??[];}
+    static void Write<T>(string p,IEnumerable<T> x){lock(DataLock)AtomicWrite(p,JsonSerializer.Serialize(x,new JsonSerializerOptions{WriteIndented=true}));}
+    static void AtomicWrite(string p,string content){var tmp=p+".tmp";File.WriteAllText(tmp,content);File.Move(tmp,p,true);}
 }
 public class V2DailyList{public string id{get;set;}="";public DateTime date{get;set;}public string doctor{get;set;}="";public string shift{get;set;}="صباحي";public string state{get;set;}="مفتوحة";public string actor{get;set;}="";public string modifiedBy{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
 public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string status{get;set;}="محجوز";public bool isDeleted{get;set;}=false;public DateTime? deletedAt{get;set;}public string deletedBy{get;set;}="";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}

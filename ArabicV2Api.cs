@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 
 public static class ArabicV2Api
 {
@@ -8,8 +10,32 @@ public static class ArabicV2Api
         var bookingsFile=Path.Combine(dataDir,"bookings-v2.json");
         var auditFile=Path.Combine(dataDir,"audit-v2.json");
         var doctorsFile=Path.Combine(dataDir,"doctors-v2.json");
+        var adminFile=Path.Combine(dataDir,"admin-v2.json");
         Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]");
         Init(doctorsFile,JsonSerializer.Serialize(new[]{"د. أحمد","د. محمد"}));
+        Init(adminFile,JsonSerializer.Serialize(new V2AdminConfig{pinHash=HashPin("1234")}));
+
+        app.MapPost("/api/v2/admin/login",async(HttpRequest r)=>{
+            var x=await JsonSerializer.DeserializeAsync<V2AdminLogin>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
+            if(x==null||cfg.pinHash!=HashPin(x.pin))return Results.Unauthorized();
+            Audit(auditFile,x.actor,"دخول لوحة الأدمن","تم فتح لوحة الأدمن",r);return Results.Ok(new{ok=true});
+        });
+        app.MapPost("/api/v2/admin/change-pin",async(HttpRequest r)=>{
+            var x=await JsonSerializer.DeserializeAsync<V2AdminPinChange>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
+            if(x==null||cfg.pinHash!=HashPin(x.oldPin)||string.IsNullOrWhiteSpace(x.newPin)||x.newPin.Length<4)return Results.BadRequest();
+            cfg.pinHash=HashPin(x.newPin);File.WriteAllText(adminFile,JsonSerializer.Serialize(cfg,new JsonSerializerOptions{WriteIndented=true}));
+            Audit(auditFile,x.actor,"تغيير PIN الأدمن","تم تغيير رمز لوحة الأدمن",r);return Results.Ok();
+        });
+        app.MapDelete("/api/v2/doctors", (string name,string actor,string pin,HttpRequest r)=>{
+            var cfg=ReadOne<V2AdminConfig>(adminFile);if(cfg.pinHash!=HashPin(pin))return Results.Unauthorized();
+            var a=Read<string>(doctorsFile);a.RemoveAll(x=>x==name);Write(doctorsFile,a);Audit(auditFile,actor,"حذف طبيب",name,r);return Results.Ok();
+        });
+        app.MapPost("/api/v2/admin/backup",(string actor,string pin,HttpRequest r)=>{
+            var cfg=ReadOne<V2AdminConfig>(adminFile);if(cfg.pinHash!=HashPin(pin))return Results.Unauthorized();
+            var stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dataDir,"backups-v2",stamp);Directory.CreateDirectory(bd);
+            foreach(var file in new[]{listsFile,bookingsFile,auditFile,doctorsFile,adminFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
+            Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
+        });
 
         app.MapGet("/api/v2/doctors",()=>Results.Json(Read<string>(doctorsFile)));
         app.MapPost("/api/v2/doctors",async(HttpRequest r)=>{
@@ -78,7 +104,7 @@ public static class ArabicV2Api
     }
     static string NextPatientId(List<V2Booking> a){var n=a.Select(x=>int.TryParse((x.patientId??"").Replace("P",""),out var v)?v:0).DefaultIfEmpty(0).Max()+1;return $"P{n:000000}";}
     static void Audit(string f,string actor,string action,string detail,HttpRequest r){var a=Read<V2Audit>(f);a.Add(new V2Audit{time=DateTime.Now,actor=string.IsNullOrWhiteSpace(actor)?"غير محدد":actor,action=action,detail=detail,device=r.Headers["User-Agent"].ToString()});Write(f,a);}
-    static void Init(string p,string v){if(!File.Exists(p))File.WriteAllText(p,v);}
+    static string HashPin(string s)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s??"")));\n    static T ReadOne<T>(string p) where T:new()=>JsonSerializer.Deserialize<T>(File.ReadAllText(p))??new T();\n    static void Init(string p,string v){if(!File.Exists(p))File.WriteAllText(p,v);}
     static List<T> Read<T>(string p)=>JsonSerializer.Deserialize<List<T>>(File.ReadAllText(p))??[];
     static void Write<T>(string p,IEnumerable<T> x)=>File.WriteAllText(p,JsonSerializer.Serialize(x,new JsonSerializerOptions{WriteIndented=true}));
 }
@@ -89,3 +115,7 @@ public class V2StateChange{public string state{get;set;}="";public string actor{
 public class V2DoctorInput{public string name{get;set;}="";public string actor{get;set;}="";}
 
 public class V2Alert{public string type{get;set;}="";public DateTime date{get;set;}public string severity{get;set;}="warning";public string message{get;set;}="";}
+
+public class V2AdminConfig{public string pinHash{get;set;}="";}
+public class V2AdminLogin{public string pin{get;set;}="";public string actor{get;set;}="";}
+public class V2AdminPinChange{public string oldPin{get;set;}="";public string newPin{get;set;}="";public string actor{get;set;}="";}

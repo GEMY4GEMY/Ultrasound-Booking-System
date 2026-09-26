@@ -78,7 +78,12 @@ public static class ArabicV2Api
             var lists=Read<V2DailyList>(listsFile);var list=lists.FirstOrDefault(z=>z.id==x.listId);if(list==null)return Results.BadRequest(new{error="list_missing"});
             if(list.state!="مفتوحة")return Results.Conflict(new{error="list_locked"});
             var a=Read<V2Booking>(bookingsFile);x.id=Guid.NewGuid().ToString("N")[..8].ToUpper();
-            if(string.IsNullOrWhiteSpace(x.patientId))x.patientId=NextPatientId(a);x.date=list.date;x.doctor=list.doctor;x.shift=list.shift;x.createdAt=x.updatedAt=DateTime.Now;
+            var samePhone=a.Where(z=>!z.isDeleted&&z.phone==x.phone).OrderByDescending(z=>z.createdAt).FirstOrDefault();
+            if(string.IsNullOrWhiteSpace(x.patientId)&&samePhone!=null)x.patientId=samePhone.patientId;
+            if(string.IsNullOrWhiteSpace(x.patientId))x.patientId=NextPatientId(a);
+            var idOwner=a.FirstOrDefault(z=>!z.isDeleted&&z.patientId.Equals(x.patientId,StringComparison.OrdinalIgnoreCase));
+            if(idOwner!=null&&idOwner.phone!=x.phone)return Results.Conflict(new{error="patient_id_conflict",patientId=x.patientId,existingName=idOwner.patientName});
+            x.date=list.date;x.doctor=list.doctor;x.shift=list.shift;x.createdAt=x.updatedAt=DateTime.Now;
             a.Add(x);Write(bookingsFile,a);Audit(auditFile,x.actor,"إضافة حجز",$"{x.patientId} - {x.patientName} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
         });
         app.MapPut("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
@@ -112,8 +117,12 @@ public static class ArabicV2Api
         });
         app.MapGet("/api/v2/patients/search",(string q)=>{
             q=(q??"").Trim().ToLowerInvariant();if(q.Length<2)return Results.Json(Array.Empty<V2Booking>());
-            var a=Read<V2Booking>(bookingsFile).Where(x=>(x.patientName??"").ToLowerInvariant().Contains(q)||(x.phone??"").Contains(q)||(x.patientId??"").ToLowerInvariant().Contains(q)).OrderByDescending(x=>x.date).Take(50);
+            var a=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&((x.patientName??"").ToLowerInvariant().Contains(q)||(x.phone??"").Contains(q)||(x.patientId??"").ToLowerInvariant().Contains(q))).OrderByDescending(x=>x.date).Take(50);
             return Results.Json(a);
+        });
+        app.MapGet("/api/v2/patients/by-phone",(string phone)=>{
+            var b=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.phone==phone).OrderByDescending(x=>x.createdAt).FirstOrDefault();
+            return b==null?Results.NotFound():Results.Ok(new{b.patientId,b.patientName,b.phone,lastDate=b.date,lastDoctor=b.doctor,lastShift=b.shift,lastExam=b.exam});
         });
         app.MapGet("/api/v2/audit",()=>Results.Json(Read<V2Audit>(auditFile).OrderByDescending(x=>x.time).Take(1000)));
         app.MapGet("/api/v2/admin/summary",()=>Results.Ok(new{

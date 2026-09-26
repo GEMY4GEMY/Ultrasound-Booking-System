@@ -44,7 +44,7 @@ public static class ArabicV2Api
         app.MapPost("/api/v2/admin/backup",(string actor,HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();
             var stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dataDir,"backups-v2",stamp);Directory.CreateDirectory(bd);
-            foreach(var file in new[]{listsFile,bookingsFile,auditFile,doctorsFile,adminFile,settingsFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
+            foreach(var file in new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,adminFile,settingsFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
             Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
         });
 
@@ -58,7 +58,7 @@ public static class ArabicV2Api
             var source=Path.Combine(dataDir,"backups-v2",safeName);if(!Directory.Exists(source))return Results.NotFound();
             await mutationGate.WaitAsync();try{
                 var safetyStamp="before_restore_"+DateTime.Now.ToString("yyyyMMdd_HHmmss");var safety=Path.Combine(dataDir,"backups-v2",safetyStamp);Directory.CreateDirectory(safety);
-                var files=new[]{listsFile,bookingsFile,auditFile,doctorsFile,adminFile,settingsFile};foreach(var file in files)if(File.Exists(file))File.Copy(file,Path.Combine(safety,Path.GetFileName(file)),true);
+                var files=new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,adminFile,settingsFile};foreach(var file in files)if(File.Exists(file))File.Copy(file,Path.Combine(safety,Path.GetFileName(file)),true);
                 lock(DataLock){foreach(var file in files){var src=Path.Combine(source,Path.GetFileName(file));if(File.Exists(src))File.Copy(src,file,true);}}
                 Audit(auditFile,x.actor,"استعادة نسخة احتياطية",$"{safeName} - نسخة أمان قبل الاستعادة: {safetyStamp}",r);return Results.Ok(new{restored=safeName,safetyBackup=safetyStamp});
             }finally{mutationGate.Release();}

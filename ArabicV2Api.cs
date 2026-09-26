@@ -117,11 +117,11 @@ public static class ArabicV2Api
             if(string.IsNullOrWhiteSpace(x.patientName)||string.IsNullOrWhiteSpace(x.exam)||!System.Text.RegularExpressions.Regex.IsMatch(x.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_data"});
             var lists=Read<V2DailyList>(listsFile);var list=lists.FirstOrDefault(z=>z.id==x.listId);if(list==null)return Results.BadRequest(new{error="list_missing"});
             if(list.state!="مفتوحة")return Results.Conflict(new{error="list_locked"});
-            var a=Read<V2Booking>(bookingsFile);x.id=Guid.NewGuid().ToString("N")[..8].ToUpper();
-            var samePhone=a.Where(z=>!z.isDeleted&&z.phone==x.phone).OrderByDescending(z=>z.createdAt).FirstOrDefault();
-            if(string.IsNullOrWhiteSpace(x.patientId)&&samePhone!=null)x.patientId=samePhone.patientId;
-            if(string.IsNullOrWhiteSpace(x.patientId))x.patientId=NextPatientId(a);
-            var idOwner=a.FirstOrDefault(z=>!z.isDeleted&&z.patientId.Equals(x.patientId,StringComparison.OrdinalIgnoreCase));
+            var a=Read<V2Booking>(bookingsFile);var patientRegistry=Read<V2Patient>(patientsFile);x.id=Guid.NewGuid().ToString("N")[..8].ToUpper();
+            var samePatient=patientRegistry.Where(z=>z.phone==x.phone).OrderByDescending(z=>z.updatedAt).FirstOrDefault();
+            if(string.IsNullOrWhiteSpace(x.patientId)&&samePatient!=null)x.patientId=samePatient.patientId;
+            if(string.IsNullOrWhiteSpace(x.patientId))x.patientId=NextPatientId(patientRegistry);
+            var idOwner=patientRegistry.FirstOrDefault(z=>z.patientId.Equals(x.patientId,StringComparison.OrdinalIgnoreCase));
             if(idOwner!=null&&idOwner.phone!=x.phone)return Results.Conflict(new{error="patient_id_conflict",patientId=x.patientId,existingName=idOwner.patientName});
             x.date=list.date;x.doctor=list.doctor;x.shift=list.shift;x.createdAt=x.updatedAt=DateTime.Now;
             a.Add(x);Write(bookingsFile,a);var ps=Read<V2Patient>(patientsFile);var pi=ps.FindIndex(p=>p.patientId.Equals(x.patientId,StringComparison.OrdinalIgnoreCase));if(pi<0)ps.Add(new V2Patient{patientId=x.patientId,patientName=x.patientName,phone=x.phone,createdAt=DateTime.Now,updatedAt=DateTime.Now});else{ps[pi].patientName=x.patientName;ps[pi].phone=x.phone;ps[pi].updatedAt=DateTime.Now;}Write(patientsFile,ps);Audit(auditFile,x.actor,"إضافة حجز",$"{x.patientId} - {x.patientName} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
@@ -201,7 +201,7 @@ public static class ArabicV2Api
         });
     }
     static string NormalizeName(string? s){if(string.IsNullOrWhiteSpace(s))return "";var t=s.Normalize(NormalizationForm.FormD);var sb=new StringBuilder();foreach(var ch in t){if(CharUnicodeInfo.GetUnicodeCategory(ch)!=UnicodeCategory.NonSpacingMark)sb.Append(ch);}return sb.ToString().Normalize(NormalizationForm.FormC).Replace("ـ","").Replace("أ","ا").Replace("إ","ا").Replace("آ","ا").Replace("ى","ي").Replace("ؤ","و").Replace("ئ","ي").Replace("ة","ه").ToLowerInvariant().Trim();}
-    static string NextPatientId(List<V2Booking> a){var n=a.Select(x=>int.TryParse((x.patientId??"").Replace("P",""),out var v)?v:0).DefaultIfEmpty(0).Max()+1;return $"P{n:000000}";}
+    static string NextPatientId(List<V2Patient> a){var n=a.Select(x=>int.TryParse((x.patientId??"").Replace("P",""),out var v)?v:0).DefaultIfEmpty(0).Max()+1;return $"P{n:000000}";}
     static void Audit(string f,string actor,string action,string detail,HttpRequest r){lock(DataLock){var a=Read<V2Audit>(f);a.Add(new V2Audit{time=DateTime.Now,actor=string.IsNullOrWhiteSpace(actor)?"غير محدد":actor,action=action,detail=detail,device=r.Headers["User-Agent"].ToString()});Write(f,a);}}
     static string HashPin(string s)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s??"")));
     static T ReadOne<T>(string p) where T:new(){lock(DataLock)return JsonSerializer.Deserialize<T>(File.ReadAllText(p))??new T();}

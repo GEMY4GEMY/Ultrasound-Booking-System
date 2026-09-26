@@ -11,9 +11,11 @@ public static class ArabicV2Api
         var auditFile=Path.Combine(dataDir,"audit-v2.json");
         var doctorsFile=Path.Combine(dataDir,"doctors-v2.json");
         var adminFile=Path.Combine(dataDir,"admin-v2.json");
+        var settingsFile=Path.Combine(dataDir,"settings-v2.json");
         Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]");
         Init(doctorsFile,JsonSerializer.Serialize(new[]{"د. أحمد","د. محمد"}));
         Init(adminFile,JsonSerializer.Serialize(new V2AdminConfig{pinHash=HashPin("1234")}));
+        Init(settingsFile,JsonSerializer.Serialize(new V2Settings{workingDays=new[]{0,1,2,3,4,6},duplicateNameDays=30,requireMorning=true,requireEvening=true,alertsStartDate=DateTime.Today}));
 
         app.MapPost("/api/v2/admin/login",async(HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2AdminLogin>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
@@ -35,6 +37,15 @@ public static class ArabicV2Api
             var stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dataDir,"backups-v2",stamp);Directory.CreateDirectory(bd);
             foreach(var file in new[]{listsFile,bookingsFile,auditFile,doctorsFile,adminFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
             Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
+        });
+
+        app.MapGet("/api/v2/settings",()=>Results.Json(ReadOne<V2Settings>(settingsFile)));
+        app.MapPost("/api/v2/settings",async(HttpRequest r)=>{
+            var x=await JsonSerializer.DeserializeAsync<V2SettingsUpdate>(r.Body);if(x==null)return Results.BadRequest();
+            var cfg=ReadOne<V2AdminConfig>(adminFile);if(cfg.pinHash!=HashPin(x.pin))return Results.Unauthorized();
+            var s=x.settings??new V2Settings();s.duplicateNameDays=Math.Clamp(s.duplicateNameDays,1,365);s.workingDays=(s.workingDays??[]).Distinct().Where(d=>d>=0&&d<=6).OrderBy(d=>d).ToArray();
+            File.WriteAllText(settingsFile,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));
+            Audit(auditFile,x.actor,"تعديل إعدادات التشغيل",$"أيام العمل: {string.Join(",",s.workingDays)} - فترة التكرار: {s.duplicateNameDays} يوم",r);return Results.Ok(s);
         });
 
         app.MapGet("/api/v2/doctors",()=>Results.Json(Read<string>(doctorsFile)));
@@ -113,20 +124,16 @@ public static class ArabicV2Api
             server=Environment.MachineName
         }));
         app.MapGet("/api/v2/alerts",()=>{
-            var lists=Read<V2DailyList>(listsFile);var today=DateTime.Today;var alerts=new List<V2Alert>();
-            var dates=lists.Select(x=>x.date.Date).Distinct().Where(d=>d<=today).OrderByDescending(d=>d).ToList();
-            foreach(var d in dates){
-                var day=lists.Where(x=>x.date.Date==d).ToList();
-                var morning=day.Any(x=>x.shift=="صباحي");var evening=day.Any(x=>x.shift=="مسائي");
-                if(d<today&&day.Any(x=>x.state!="مكتملة"))
-                    alerts.Add(new V2Alert{type="old_incomplete",date=d,severity="danger",message=$"قوائم سابقة غير مكتملة بتاريخ {d:dd/MM/yyyy}"});
-                if(d==today&&day.Count>0&&(!morning||!evening))
-                    alerts.Add(new V2Alert{type="today_missing_shift",date=d,severity="warning",message=!morning?"لم يتم إنشاء القائمة الصباحية لليوم":"لم يتم إنشاء القائمة المسائية لليوم"});
-                if(d<today&&day.Count>0&&(!morning||!evening))
-                    alerts.Add(new V2Alert{type="old_missing_shift",date=d,severity="warning",message=$"كان هناك شفت غير منشأ بتاريخ {d:dd/MM/yyyy}"});
+            var lists=Read<V2DailyList>(listsFile);var s=ReadOne<V2Settings>(settingsFile);var today=DateTime.Today;var alerts=new List<V2Alert>();
+            var start=s.alertsStartDate==default?(lists.Count>0?lists.Min(x=>x.date.Date):today):s.alertsStartDate.Date;if(start>today)start=today;
+            for(var d=start;d<=today;d=d.AddDays(1)){
+                if(!s.workingDays.Contains((int)d.DayOfWeek))continue;
+                var day=lists.Where(x=>x.date.Date==d).ToList();var morning=day.Any(x=>x.shift=="صباحي");var evening=day.Any(x=>x.shift=="مسائي");
+                if(day.Count==0)alerts.Add(new V2Alert{type=d==today?"today_no_lists":"old_no_lists",date=d,severity=d==today?"danger":"warning",message=d==today?"لم يتم إنشاء أي قائمة لليوم حتى الآن":$"لم يتم إنشاء قوائم يوم {d:dd/MM/yyyy}"});
+                if(s.requireMorning&&!morning&&day.Count>0)alerts.Add(new V2Alert{type="missing_morning",date=d,severity="warning",message=d==today?"لم يتم إنشاء القائمة الصباحية لليوم":$"لم يتم إنشاء القائمة الصباحية بتاريخ {d:dd/MM/yyyy}"});
+                if(s.requireEvening&&!evening&&day.Count>0)alerts.Add(new V2Alert{type="missing_evening",date=d,severity="warning",message=d==today?"لم يتم إنشاء القائمة المسائية لليوم":$"لم يتم إنشاء القائمة المسائية بتاريخ {d:dd/MM/yyyy}"});
+                if(d<today&&day.Any(x=>x.state!="مكتملة"))alerts.Add(new V2Alert{type="old_incomplete",date=d,severity="danger",message=$"قوائم سابقة غير مكتملة بتاريخ {d:dd/MM/yyyy}"});
             }
-            if(!lists.Any(x=>x.date.Date==today))
-                alerts.Add(new V2Alert{type="today_no_lists",date=today,severity="danger",message="لم يتم إنشاء أي قائمة لليوم حتى الآن"});
             return Results.Json(alerts.OrderByDescending(x=>x.date).ThenBy(x=>x.type));
         });
     }
@@ -154,3 +161,6 @@ public class V2BookingAction{public string status{get;set;}="محجوز";public 
 public class V2BookingMove{public string listId{get;set;}="";public string actor{get;set;}="";}
 
 public class V2DeleteBooking{public string actor{get;set;}="";public string reason{get;set;}="";}
+
+public class V2Settings{public int[] workingDays{get;set;}=[];public int duplicateNameDays{get;set;}=30;public bool requireMorning{get;set;}=true;public bool requireEvening{get;set;}=true;public DateTime alertsStartDate{get;set;}=DateTime.Today;}
+public class V2SettingsUpdate{public string pin{get;set;}="";public string actor{get;set;}="";public V2Settings? settings{get;set;}}

@@ -44,6 +44,22 @@ public static class ArabicV2Api
             Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
         });
 
+        app.MapGet("/api/v2/admin/backups",(HttpRequest r)=>{
+            if(!IsAdmin(r))return Results.Unauthorized();var root=Path.Combine(dataDir,"backups-v2");Directory.CreateDirectory(root);
+            return Results.Json(Directory.GetDirectories(root).Select(Path.GetFileName).Where(x=>!string.IsNullOrWhiteSpace(x)).OrderByDescending(x=>x).Take(100));
+        });
+        app.MapPost("/api/v2/admin/restore",async(HttpRequest r)=>{
+            if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2RestoreRequest>(r.Body);if(x==null||string.IsNullOrWhiteSpace(x.folder))return Results.BadRequest();
+            var safeName=Path.GetFileName(x.folder);if(safeName!=x.folder)return Results.BadRequest(new{error="invalid_backup"});
+            var source=Path.Combine(dataDir,"backups-v2",safeName);if(!Directory.Exists(source))return Results.NotFound();
+            await mutationGate.WaitAsync();try{
+                var safetyStamp="before_restore_"+DateTime.Now.ToString("yyyyMMdd_HHmmss");var safety=Path.Combine(dataDir,"backups-v2",safetyStamp);Directory.CreateDirectory(safety);
+                var files=new[]{listsFile,bookingsFile,auditFile,doctorsFile,adminFile,settingsFile};foreach(var file in files)if(File.Exists(file))File.Copy(file,Path.Combine(safety,Path.GetFileName(file)),true);
+                lock(DataLock){foreach(var file in files){var src=Path.Combine(source,Path.GetFileName(file));if(File.Exists(src))File.Copy(src,file,true);}}
+                Audit(auditFile,x.actor,"استعادة نسخة احتياطية",$"{safeName} - نسخة أمان قبل الاستعادة: {safetyStamp}",r);return Results.Ok(new{restored=safeName,safetyBackup=safetyStamp});
+            }finally{mutationGate.Release();}
+        });
+
         app.MapGet("/api/v2/settings",()=>Results.Json(ReadOne<V2Settings>(settingsFile)));
         app.MapPost("/api/v2/settings",async(HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2SettingsUpdate>(r.Body);if(x==null)return Results.BadRequest();
@@ -206,3 +222,5 @@ public class V2Settings{public int[] workingDays{get;set;}=[];public int duplica
 public class V2SettingsUpdate{public string pin{get;set;}="";public string actor{get;set;}="";public V2Settings? settings{get;set;}}
 
 public class V2ListEdit{public DateTime date{get;set;}public string doctor{get;set;}="";public string shift{get;set;}="صباحي";public string actor{get;set;}="";}
+
+public class V2RestoreRequest{public string folder{get;set;}="";public string actor{get;set;}="";}

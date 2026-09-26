@@ -165,13 +165,16 @@ public static class ArabicV2Api
             }finally{mutationGate.Release();}
         });
         app.MapGet("/api/v2/patients/search",(string q)=>{
-            q=(q??"").Trim();if(q.Length<2)return Results.Json(Array.Empty<V2Booking>());var nq=NormalizeName(q);
-            var a=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&(NormalizeName(x.patientName).Contains(nq)||(x.phone??"").Contains(q)||(x.patientId??"").Contains(q,StringComparison.OrdinalIgnoreCase))).OrderByDescending(x=>x.date).Take(50);
-            return Results.Json(a);
+            q=(q??"").Trim();if(q.Length<2)return Results.Json(Array.Empty<object>());var nq=NormalizeName(q);
+            var bookings=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted).ToList();
+            var patients=Read<V2Patient>(patientsFile).Where(x=>NormalizeName(x.patientName).Contains(nq)||(x.phone??"").Contains(q)||(x.patientId??"").Contains(q,StringComparison.OrdinalIgnoreCase)).Take(50)
+                .Select(p=>{var b=bookings.Where(x=>x.patientId.Equals(p.patientId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>x.date).ThenByDescending(x=>x.createdAt).FirstOrDefault();return new{p.patientId,p.patientName,p.phone,lastDate=b?.date,lastDoctor=b?.doctor??"",lastShift=b?.shift??"",lastExam=b?.exam??""};});
+            return Results.Json(patients);
         });
         app.MapGet("/api/v2/patients/by-phone",(string phone)=>{
-            var b=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.phone==phone).OrderByDescending(x=>x.createdAt).FirstOrDefault();
-            return b==null?Results.NotFound():Results.Ok(new{b.patientId,b.patientName,b.phone,lastDate=b.date,lastDoctor=b.doctor,lastShift=b.shift,lastExam=b.exam});
+            var p=Read<V2Patient>(patientsFile).Where(x=>x.phone==phone).OrderByDescending(x=>x.updatedAt).FirstOrDefault();if(p==null)return Results.NotFound();
+            var b=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.patientId.Equals(p.patientId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>x.date).ThenByDescending(x=>x.createdAt).FirstOrDefault();
+            return Results.Ok(new{p.patientId,p.patientName,p.phone,lastDate=b?.date,lastDoctor=b?.doctor??"",lastShift=b?.shift??"",lastExam=b?.exam??""});
         });
         app.MapGet("/api/v2/audit",(HttpRequest r)=>IsAdmin(r)?Results.Json(Read<V2Audit>(auditFile).OrderByDescending(x=>x.time).Take(1000)):Results.Unauthorized());
         app.MapGet("/api/v2/admin/summary",(HttpRequest r)=>{if(!IsAdmin(r))return Results.Unauthorized();return Results.Ok(new{

@@ -60,7 +60,7 @@ public static class ArabicV2Api
             Audit(auditFile,c.actor,"تغيير حالة القائمة",$"{x.doctor} - {x.shift}: {old} ← {x.state}",r);return Results.Ok(x);
         });
 
-        app.MapGet("/api/v2/bookings",()=>Results.Json(Read<V2Booking>(bookingsFile).OrderByDescending(x=>x.createdAt)));
+        app.MapGet("/api/v2/bookings",(bool includeDeleted=false)=>Results.Json(Read<V2Booking>(bookingsFile).Where(x=>includeDeleted||!x.isDeleted).OrderByDescending(x=>x.createdAt)));
         app.MapPost("/api/v2/bookings",async(HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2Booking>(r.Body);if(x==null)return Results.BadRequest();
             if(string.IsNullOrWhiteSpace(x.patientName)||string.IsNullOrWhiteSpace(x.exam)||!System.Text.RegularExpressions.Regex.IsMatch(x.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_data"});
@@ -126,7 +126,7 @@ public static class ArabicV2Api
     static void Write<T>(string p,IEnumerable<T> x)=>File.WriteAllText(p,JsonSerializer.Serialize(x,new JsonSerializerOptions{WriteIndented=true}));
 }
 public class V2DailyList{public string id{get;set;}="";public DateTime date{get;set;}public string doctor{get;set;}="";public string shift{get;set;}="صباحي";public string state{get;set;}="مفتوحة";public string actor{get;set;}="";public string modifiedBy{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
-public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string status{get;set;}="محجوز";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
+public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string status{get;set;}="محجوز";public bool isDeleted{get;set;}=false;public DateTime? deletedAt{get;set;}public string deletedBy{get;set;}="";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
 public class V2Audit{public DateTime time{get;set;}public string actor{get;set;}="";public string action{get;set;}="";public string detail{get;set;}="";public string device{get;set;}="";}
 public class V2StateChange{public string state{get;set;}="";public string actor{get;set;}="";}
 public class V2DoctorInput{public string name{get;set;}="";public string actor{get;set;}="";}

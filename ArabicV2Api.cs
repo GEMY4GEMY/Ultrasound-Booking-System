@@ -76,6 +76,11 @@ public static class ArabicV2Api
             var old=a[i];n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);
             Audit(auditFile,n.actor,"تعديل حجز",$"{n.patientId} - {n.patientName}",r);return Results.Ok(n);
         });
+        app.MapDelete("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
+            var x=await JsonSerializer.DeserializeAsync<V2DeleteBooking>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
+            if(x==null||b==null)return Results.NotFound();b.isDeleted=true;b.deletedAt=DateTime.Now;b.deletedBy=x.actor;b.updatedAt=DateTime.Now;Write(bookingsFile,a);
+            Audit(auditFile,x.actor,"حذف حالة",$"{b.patientId} - {b.patientName} - السبب: {x.reason}",r);return Results.Ok();
+        });
         app.MapPut("/api/v2/bookings/{id}/status",async(string id,HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2BookingAction>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
             if(x==null||b==null)return Results.NotFound();var old=b.status;b.status=x.status;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
@@ -139,3 +144,5 @@ public class V2AdminPinChange{public string oldPin{get;set;}="";public string ne
 
 public class V2BookingAction{public string status{get;set;}="محجوز";public string actor{get;set;}="";}
 public class V2BookingMove{public string listId{get;set;}="";public string actor{get;set;}="";}
+
+public class V2DeleteBooking{public string actor{get;set;}="";public string reason{get;set;}="";}

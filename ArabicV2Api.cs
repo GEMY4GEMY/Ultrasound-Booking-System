@@ -46,7 +46,7 @@ public static class ArabicV2Api
         app.MapGet("/api/v2/settings",()=>Results.Json(ReadOne<V2Settings>(settingsFile)));
         app.MapPost("/api/v2/settings",async(HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2SettingsUpdate>(r.Body);if(x==null)return Results.BadRequest();
-            var s=x.settings??new V2Settings();s.duplicateNameDays=Math.Clamp(s.duplicateNameDays,1,365);s.workingDays=(s.workingDays??[]).Distinct().Where(d=>d>=0&&d<=6).OrderBy(d=>d).ToArray();
+            var s=x.settings??new V2Settings();s.duplicateNameDays=Math.Clamp(s.duplicateNameDays,1,365);s.workingDays=(s.workingDays??[]).Distinct().Where(d=>d>=0&&d<=6).OrderBy(d=>d).ToArray();if(s.workingDays.Length==0)return Results.BadRequest(new{error="working_days_required"});if(s.alertsStartDate==default)s.alertsStartDate=DateTime.Today;s.alertsStartDate=s.alertsStartDate.Date;if(s.alertsStartDate>DateTime.Today)s.alertsStartDate=DateTime.Today;
             lock(DataLock)AtomicWrite(settingsFile,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));
             Audit(auditFile,x.actor,"تعديل إعدادات التشغيل",$"أيام العمل: {string.Join(",",s.workingDays)} - فترة التكرار: {s.duplicateNameDays} يوم",r);return Results.Ok(s);
         });

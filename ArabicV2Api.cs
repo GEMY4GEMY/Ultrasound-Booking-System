@@ -76,6 +76,23 @@ public static class ArabicV2Api
             var old=a[i];n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);
             Audit(auditFile,n.actor,"تعديل حجز",$"{n.patientId} - {n.patientName}",r);return Results.Ok(n);
         });
+        app.MapPut("/api/v2/bookings/{id}/status",async(string id,HttpRequest r)=>{
+            var x=await JsonSerializer.DeserializeAsync<V2BookingAction>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
+            if(x==null||b==null)return Results.NotFound();var old=b.status;b.status=x.status;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
+            Audit(auditFile,x.actor,"تغيير حالة حجز",$"{b.patientId} - {b.patientName}: {old} ← {b.status}",r);return Results.Ok(b);
+        });
+        app.MapPut("/api/v2/bookings/{id}/move",async(string id,HttpRequest r)=>{
+            var x=await JsonSerializer.DeserializeAsync<V2BookingMove>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
+            var lists=Read<V2DailyList>(listsFile);var target=x==null?null:lists.FirstOrDefault(z=>z.id==x.listId);
+            if(x==null||b==null||target==null)return Results.NotFound();if(target.state!="مفتوحة")return Results.Conflict(new{error="target_locked"});
+            var old=$"{b.date:yyyy-MM-dd} - {b.doctor} - {b.shift}";b.listId=target.id;b.date=target.date;b.doctor=target.doctor;b.shift=target.shift;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
+            Audit(auditFile,x.actor,"نقل حجز",$"{b.patientId} - {b.patientName}: {old} ← {b.date:yyyy-MM-dd} - {b.doctor} - {b.shift}",r);return Results.Ok(b);
+        });
+        app.MapGet("/api/v2/patients/search",(string q)=>{
+            q=(q??"").Trim().ToLowerInvariant();if(q.Length<2)return Results.Json(Array.Empty<V2Booking>());
+            var a=Read<V2Booking>(bookingsFile).Where(x=>(x.patientName??"").ToLowerInvariant().Contains(q)||(x.phone??"").Contains(q)||(x.patientId??"").ToLowerInvariant().Contains(q)).OrderByDescending(x=>x.date).Take(50);
+            return Results.Json(a);
+        });
         app.MapGet("/api/v2/audit",()=>Results.Json(Read<V2Audit>(auditFile).OrderByDescending(x=>x.time).Take(1000)));
         app.MapGet("/api/v2/admin/summary",()=>Results.Ok(new{
             doctors=Read<string>(doctorsFile).Count,
@@ -109,7 +126,7 @@ public static class ArabicV2Api
     static void Write<T>(string p,IEnumerable<T> x)=>File.WriteAllText(p,JsonSerializer.Serialize(x,new JsonSerializerOptions{WriteIndented=true}));
 }
 public class V2DailyList{public string id{get;set;}="";public DateTime date{get;set;}public string doctor{get;set;}="";public string shift{get;set;}="صباحي";public string state{get;set;}="مفتوحة";public string actor{get;set;}="";public string modifiedBy{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
-public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
+public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string status{get;set;}="محجوز";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
 public class V2Audit{public DateTime time{get;set;}public string actor{get;set;}="";public string action{get;set;}="";public string detail{get;set;}="";public string device{get;set;}="";}
 public class V2StateChange{public string state{get;set;}="";public string actor{get;set;}="";}
 public class V2DoctorInput{public string name{get;set;}="";public string actor{get;set;}="";}
@@ -119,3 +136,6 @@ public class V2Alert{public string type{get;set;}="";public DateTime date{get;se
 public class V2AdminConfig{public string pinHash{get;set;}="";}
 public class V2AdminLogin{public string pin{get;set;}="";public string actor{get;set;}="";}
 public class V2AdminPinChange{public string oldPin{get;set;}="";public string newPin{get;set;}="";public string actor{get;set;}="";}
+
+public class V2BookingAction{public string status{get;set;}="محجوز";public string actor{get;set;}="";}
+public class V2BookingMove{public string listId{get;set;}="";public string actor{get;set;}="";}

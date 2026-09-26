@@ -117,7 +117,7 @@ public static class ArabicV2Api
             var dates=lists.Select(x=>x.date.Date).Distinct().Where(d=>d<=today).OrderByDescending(d=>d).ToList();
             foreach(var d in dates){
                 var day=lists.Where(x=>x.date.Date==d).ToList();
-                var morning=day.Any(x=>x.shift=="صباحي"),evening=day.Any(x=>x.shift=="مسائي");
+                var morning=day.Any(x=>x.shift=="صباحي");var evening=day.Any(x=>x.shift=="مسائي");
                 if(d<today&&day.Any(x=>x.state!="مكتملة"))
                     alerts.Add(new V2Alert{type="old_incomplete",date=d,severity="danger",message=$"قوائم سابقة غير مكتملة بتاريخ {d:dd/MM/yyyy}"});
                 if(d==today&&day.Count>0&&(!morning||!evening))

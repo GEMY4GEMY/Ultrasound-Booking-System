@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
-using System.Globalization;
+using System.Globalization;\nusing System.Net;\nusing System.Net.Sockets;
 
 public static class ArabicV2Api
 {
@@ -175,7 +175,9 @@ public static class ArabicV2Api
             lists=Read<V2DailyList>(listsFile).Count,
             bookings=Read<V2Booking>(bookingsFile).Count,
             dataPath=dataDir,
-            server=Environment.MachineName
+            server=Environment.MachineName,
+            port=5090,
+            addresses=Dns.GetHostAddresses(Dns.GetHostName()).Where(x=>x.AddressFamily==AddressFamily.InterNetwork&&!IPAddress.IsLoopback(x)).Select(x=>"http://"+x+":5090").Distinct().ToArray()
         });});
         app.MapGet("/api/v2/alerts",()=>{
             var lists=Read<V2DailyList>(listsFile);var s=ReadOne<V2Settings>(settingsFile);var today=DateTime.Today;var alerts=new List<V2Alert>();

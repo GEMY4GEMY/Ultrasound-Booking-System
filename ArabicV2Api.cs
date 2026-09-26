@@ -14,6 +14,7 @@ public static class ArabicV2Api
         var adminFile=Path.Combine(dataDir,"admin-v2.json");
         var settingsFile=Path.Combine(dataDir,"settings-v2.json");
         var adminTokens=new Dictionary<string,DateTime>();
+        var mutationGate=new SemaphoreSlim(1,1);
         bool IsAdmin(HttpRequest r){var t=r.Headers["X-Admin-Token"].ToString();lock(adminTokens){return !string.IsNullOrWhiteSpace(t)&&adminTokens.TryGetValue(t,out var exp)&&exp>DateTime.Now;}}
         Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]");
         Init(doctorsFile,JsonSerializer.Serialize(new[]{"د. أحمد","د. محمد"}));
@@ -60,30 +61,37 @@ public static class ArabicV2Api
 
         app.MapGet("/api/v2/lists",()=>Results.Json(Read<V2DailyList>(listsFile).OrderByDescending(x=>x.date)));
         app.MapPost("/api/v2/lists",async(HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2DailyList>(r.Body);
             if(x==null||string.IsNullOrWhiteSpace(x.doctor)||string.IsNullOrWhiteSpace(x.shift))return Results.BadRequest();
             var a=Read<V2DailyList>(listsFile);
             if(a.Any(z=>z.date.Date==x.date.Date&&z.doctor==x.doctor&&z.shift==x.shift))return Results.Conflict(new{error="list_exists"});
             x.id=Guid.NewGuid().ToString("N")[..8].ToUpper(); x.state="مفتوحة"; x.createdAt=DateTime.Now; x.updatedAt=DateTime.Now;
             a.Add(x);Write(listsFile,a);Audit(auditFile,x.actor,"إنشاء قائمة",$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
+            }finally{mutationGate.Release();}
         });
         app.MapPut("/api/v2/lists/{id}/state",async(string id,HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var sc=await JsonSerializer.DeserializeAsync<V2StateChange>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
             if(sc==null||x==null)return Results.NotFound();if(!new[]{"مفتوحة","مقفلة","مكتملة"}.Contains(sc.state))return Results.BadRequest(new{error="invalid_state"});
             var old=x.state;x.state=sc.state;x.updatedAt=DateTime.Now;x.modifiedBy=sc.actor;Write(listsFile,a);
             Audit(auditFile,sc.actor,"تغيير حالة القائمة",$"{x.doctor} - {x.shift}: {old} ← {x.state}",r);return Results.Ok(x);
+            }finally{mutationGate.Release();}
         });
         app.MapPut("/api/v2/lists/{id}",async(string id,HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var n=await JsonSerializer.DeserializeAsync<V2ListEdit>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
             if(n==null||x==null)return Results.NotFound();if(string.IsNullOrWhiteSpace(n.doctor)||!new[]{"صباحي","مسائي"}.Contains(n.shift))return Results.BadRequest(new{error="invalid_data"});
             if(a.Any(z=>z.id!=id&&z.date.Date==n.date.Date&&z.doctor==n.doctor&&z.shift==n.shift))return Results.Conflict(new{error="list_exists"});
             var old=$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}";x.date=n.date.Date;x.doctor=n.doctor.Trim();x.shift=n.shift;x.updatedAt=DateTime.Now;x.modifiedBy=n.actor;Write(listsFile,a);
             var bs=Read<V2Booking>(bookingsFile);foreach(var b in bs.Where(z=>z.listId==id)){b.date=x.date;b.doctor=x.doctor;b.shift=x.shift;b.updatedAt=DateTime.Now;}Write(bookingsFile,bs);
             Audit(auditFile,n.actor,"تعديل قائمة",$"{old} ← {x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
+            }finally{mutationGate.Release();}
         });
 
         app.MapGet("/api/v2/bookings",(bool includeDeleted=false)=>Results.Json(Read<V2Booking>(bookingsFile).Where(x=>includeDeleted||!x.isDeleted).OrderByDescending(x=>x.createdAt)));
         app.MapPost("/api/v2/bookings",async(HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2Booking>(r.Body);if(x==null)return Results.BadRequest();
             if(string.IsNullOrWhiteSpace(x.patientName)||string.IsNullOrWhiteSpace(x.exam)||!System.Text.RegularExpressions.Regex.IsMatch(x.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_data"});
             var lists=Read<V2DailyList>(listsFile);var list=lists.FirstOrDefault(z=>z.id==x.listId);if(list==null)return Results.BadRequest(new{error="list_missing"});
@@ -96,8 +104,10 @@ public static class ArabicV2Api
             if(idOwner!=null&&idOwner.phone!=x.phone)return Results.Conflict(new{error="patient_id_conflict",patientId=x.patientId,existingName=idOwner.patientName});
             x.date=list.date;x.doctor=list.doctor;x.shift=list.shift;x.createdAt=x.updatedAt=DateTime.Now;
             a.Add(x);Write(bookingsFile,a);Audit(auditFile,x.actor,"إضافة حجز",$"{x.patientId} - {x.patientName} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
+            }finally{mutationGate.Release();}
         });
         app.MapPut("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var n=await JsonSerializer.DeserializeAsync<V2Booking>(r.Body);var a=Read<V2Booking>(bookingsFile);var i=a.FindIndex(z=>z.id==id);
             if(n==null||i<0)return Results.NotFound();var sourceList=Read<V2DailyList>(listsFile).FirstOrDefault(z=>z.id==a[i].listId);if(sourceList?.state=="مكتملة")return Results.Conflict(new{error="list_completed"});if(!System.Text.RegularExpressions.Regex.IsMatch(n.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_phone"});
             var old=a[i];var changes=new List<string>();
@@ -108,23 +118,30 @@ public static class ArabicV2Api
             if(old.notes!=n.notes)changes.Add("تم تعديل الملاحظات");
             n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.status=old.status;n.isDeleted=old.isDeleted;n.deletedAt=old.deletedAt;n.deletedBy=old.deletedBy;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);
             Audit(auditFile,n.actor,"تعديل بيانات",$"{n.patientId} - {n.patientName}: {(changes.Count>0?string.Join(" | ",changes):"بدون تغيير")}",r);return Results.Ok(n);
+            }finally{mutationGate.Release();}
         });
         app.MapDelete("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2DeleteBooking>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
             if(x==null||b==null)return Results.NotFound();b.isDeleted=true;b.deletedAt=DateTime.Now;b.deletedBy=x.actor;b.updatedAt=DateTime.Now;Write(bookingsFile,a);
             Audit(auditFile,x.actor,"حذف حالة",$"{b.patientId} - {b.patientName} - السبب: {x.reason}",r);return Results.Ok();
+            }finally{mutationGate.Release();}
         });
         app.MapPut("/api/v2/bookings/{id}/status",async(string id,HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2BookingAction>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
             if(x==null||b==null)return Results.NotFound();if(!new[]{"محجوز","تم الحضور","لم يحضر","ملغي"}.Contains(x.status))return Results.BadRequest(new{error="invalid_status"});var source=Read<V2DailyList>(listsFile).FirstOrDefault(z=>z.id==b.listId);if(source?.state=="مكتملة")return Results.Conflict(new{error="list_completed"});var old=b.status;b.status=x.status;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
             Audit(auditFile,x.actor,"تغيير حالة حجز",$"{b.patientId} - {b.patientName}: {old} ← {b.status}",r);return Results.Ok(b);
+            }finally{mutationGate.Release();}
         });
         app.MapPut("/api/v2/bookings/{id}/move",async(string id,HttpRequest r)=>{
+            await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2BookingMove>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
             var lists=Read<V2DailyList>(listsFile);var target=x==null?null:lists.FirstOrDefault(z=>z.id==x.listId);
             if(x==null||b==null||target==null)return Results.NotFound();var source=lists.FirstOrDefault(z=>z.id==b.listId);if(source?.state=="مكتملة")return Results.Conflict(new{error="source_completed"});if(target.state!="مفتوحة")return Results.Conflict(new{error="target_locked"});
             var old=$"{b.date:yyyy-MM-dd} - {b.doctor} - {b.shift}";b.listId=target.id;b.date=target.date;b.doctor=target.doctor;b.shift=target.shift;b.updatedAt=DateTime.Now;b.actor=x.actor;Write(bookingsFile,a);
             Audit(auditFile,x.actor,"نقل حجز",$"{b.patientId} - {b.patientName}: {old} ← {b.date:yyyy-MM-dd} - {b.doctor} - {b.shift}",r);return Results.Ok(b);
+            }finally{mutationGate.Release();}
         });
         app.MapGet("/api/v2/patients/search",(string q)=>{
             q=(q??"").Trim().ToLowerInvariant();if(q.Length<2)return Results.Json(Array.Empty<V2Booking>());

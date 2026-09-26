@@ -16,13 +16,15 @@ public static class ArabicV2Api
         var doctorsFile=Path.Combine(dataDir,"doctors-v2.json");
         var adminFile=Path.Combine(dataDir,"admin-v2.json");
         var settingsFile=Path.Combine(dataDir,"settings-v2.json");
+        var patientsFile=Path.Combine(dataDir,"patients-v2.json");
         var adminTokens=new Dictionary<string,DateTime>();
         var mutationGate=new SemaphoreSlim(1,1);
         bool IsAdmin(HttpRequest r){var t=r.Headers["X-Admin-Token"].ToString();lock(adminTokens){return !string.IsNullOrWhiteSpace(t)&&adminTokens.TryGetValue(t,out var exp)&&exp>DateTime.Now;}}
-        Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]");
+        Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]"); Init(patientsFile,"[]");
         Init(doctorsFile,JsonSerializer.Serialize(new[]{"د. أحمد","د. محمد"}));
         Init(adminFile,JsonSerializer.Serialize(new V2AdminConfig{pinHash=HashPin("1234")}));
         Init(settingsFile,JsonSerializer.Serialize(new V2Settings{workingDays=new[]{0,1,2,3,4,6},duplicateNameDays=30,requireMorning=true,requireEvening=true,alertsStartDate=DateTime.Today}));
+        if(Read<V2Patient>(patientsFile).Count==0){var historic=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&!string.IsNullOrWhiteSpace(x.patientId)).GroupBy(x=>x.patientId,StringComparer.OrdinalIgnoreCase).Select(g=>g.OrderByDescending(x=>x.createdAt).First()).Select(x=>new V2Patient{patientId=x.patientId,patientName=x.patientName,phone=x.phone,createdAt=x.createdAt,updatedAt=x.updatedAt}).ToList();if(historic.Count>0)Write(patientsFile,historic);}
 
         app.MapPost("/api/v2/admin/login",async(HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2AdminLogin>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
@@ -122,7 +124,7 @@ public static class ArabicV2Api
             var idOwner=a.FirstOrDefault(z=>!z.isDeleted&&z.patientId.Equals(x.patientId,StringComparison.OrdinalIgnoreCase));
             if(idOwner!=null&&idOwner.phone!=x.phone)return Results.Conflict(new{error="patient_id_conflict",patientId=x.patientId,existingName=idOwner.patientName});
             x.date=list.date;x.doctor=list.doctor;x.shift=list.shift;x.createdAt=x.updatedAt=DateTime.Now;
-            a.Add(x);Write(bookingsFile,a);Audit(auditFile,x.actor,"إضافة حجز",$"{x.patientId} - {x.patientName} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
+            a.Add(x);Write(bookingsFile,a);var ps=Read<V2Patient>(patientsFile);var pi=ps.FindIndex(p=>p.patientId.Equals(x.patientId,StringComparison.OrdinalIgnoreCase));if(pi<0)ps.Add(new V2Patient{patientId=x.patientId,patientName=x.patientName,phone=x.phone,createdAt=DateTime.Now,updatedAt=DateTime.Now});else{ps[pi].patientName=x.patientName;ps[pi].phone=x.phone;ps[pi].updatedAt=DateTime.Now;}Write(patientsFile,ps);Audit(auditFile,x.actor,"إضافة حجز",$"{x.patientId} - {x.patientName} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
             }finally{mutationGate.Release();}
         });
         app.MapPut("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
@@ -206,6 +208,7 @@ public static class ArabicV2Api
     static void AtomicWrite(string p,string content){var tmp=p+".tmp";File.WriteAllText(tmp,content);File.Move(tmp,p,true);}
 }
 public class V2DailyList{public string id{get;set;}="";public DateTime date{get;set;}public string doctor{get;set;}="";public string shift{get;set;}="صباحي";public string state{get;set;}="مفتوحة";public string actor{get;set;}="";public string modifiedBy{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
+public class V2Patient{public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
 public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string status{get;set;}="محجوز";public bool isDeleted{get;set;}=false;public DateTime? deletedAt{get;set;}public string deletedBy{get;set;}="";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
 public class V2Audit{public DateTime time{get;set;}public string actor{get;set;}="";public string action{get;set;}="";public string detail{get;set;}="";public string device{get;set;}="";}
 public class V2StateChange{public string state{get;set;}="";public string actor{get;set;}="";}

@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
-using System.Globalization;\nusing System.Net;\nusing System.Net.Sockets;
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 
 public static class ArabicV2Api
 {

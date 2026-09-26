@@ -73,8 +73,14 @@ public static class ArabicV2Api
         app.MapPut("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
             var n=await JsonSerializer.DeserializeAsync<V2Booking>(r.Body);var a=Read<V2Booking>(bookingsFile);var i=a.FindIndex(z=>z.id==id);
             if(n==null||i<0)return Results.NotFound();if(!System.Text.RegularExpressions.Regex.IsMatch(n.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_phone"});
-            var old=a[i];n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);
-            Audit(auditFile,n.actor,"تعديل حجز",$"{n.patientId} - {n.patientName}",r);return Results.Ok(n);
+            var old=a[i];var changes=new List<string>();
+            if(old.patientName!=n.patientName)changes.Add($"الاسم: {old.patientName} ← {n.patientName}");
+            if(old.phone!=n.phone)changes.Add($"الهاتف: {old.phone} ← {n.phone}");
+            if(old.exam!=n.exam)changes.Add($"الفحص: {old.exam} ← {n.exam}");
+            if(old.contractType!=n.contractType)changes.Add($"التعاقد: {old.contractType} ← {n.contractType}");
+            if(old.notes!=n.notes)changes.Add("تم تعديل الملاحظات");
+            n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.status=old.status;n.isDeleted=old.isDeleted;n.deletedAt=old.deletedAt;n.deletedBy=old.deletedBy;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);
+            Audit(auditFile,n.actor,"تعديل بيانات",$"{n.patientId} - {n.patientName}: {(changes.Count>0?string.Join(" | ",changes):"بدون تغيير")}",r);return Results.Ok(n);
         });
         app.MapDelete("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2DeleteBooking>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);

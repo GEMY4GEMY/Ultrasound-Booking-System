@@ -52,13 +52,21 @@ public static class ArabicV2Api
         });
         app.MapGet("/api/v2/audit",()=>Results.Json(Read<V2Audit>(auditFile).OrderByDescending(x=>x.time).Take(1000)));
         app.MapGet("/api/v2/alerts",()=>{
-            var lists=Read<V2DailyList>(listsFile);var today=DateTime.Today;var alerts=new List<object>();
-            foreach(var d in lists.Select(x=>x.date.Date).Distinct().Where(d=>d<=today).OrderByDescending(d=>d)){
+            var lists=Read<V2DailyList>(listsFile);var today=DateTime.Today;var alerts=new List<V2Alert>();
+            var dates=lists.Select(x=>x.date.Date).Distinct().Where(d=>d<=today).OrderByDescending(d=>d).ToList();
+            foreach(var d in dates){
                 var day=lists.Where(x=>x.date.Date==d).ToList();
-                if(day.Any(x=>x.state!="مكتملة")&&d<today)alerts.Add(new{type="old_incomplete",date=d,message=$"يوجد قوائم سابقة غير مكتملة بتاريخ {d:dd/MM/yyyy}"});
-                if(day.Count>0&&(!day.Any(x=>x.shift=="صباحي")||!day.Any(x=>x.shift=="مسائي")))alerts.Add(new{type="missing_shift",date=d,message=$"لم يتم إنشاء الشفتين صباحي ومسائي بتاريخ {d:dd/MM/yyyy}"});
+                var morning=day.Any(x=>x.shift=="صباحي"),evening=day.Any(x=>x.shift=="مسائي");
+                if(d<today&&day.Any(x=>x.state!="مكتملة"))
+                    alerts.Add(new V2Alert{type="old_incomplete",date=d,severity="danger",message=$"قوائم سابقة غير مكتملة بتاريخ {d:dd/MM/yyyy}"});
+                if(d==today&&day.Count>0&&(!morning||!evening))
+                    alerts.Add(new V2Alert{type="today_missing_shift",date=d,severity="warning",message=!morning?"لم يتم إنشاء القائمة الصباحية لليوم":"لم يتم إنشاء القائمة المسائية لليوم"});
+                if(d<today&&day.Count>0&&(!morning||!evening))
+                    alerts.Add(new V2Alert{type="old_missing_shift",date=d,severity="warning",message=$"كان هناك شفت غير منشأ بتاريخ {d:dd/MM/yyyy}"});
             }
-            return Results.Json(alerts);
+            if(!lists.Any(x=>x.date.Date==today))
+                alerts.Add(new V2Alert{type="today_no_lists",date=today,severity="danger",message="لم يتم إنشاء أي قائمة لليوم حتى الآن"});
+            return Results.Json(alerts.OrderByDescending(x=>x.date).ThenBy(x=>x.type));
         });
     }
     static string NextPatientId(List<V2Booking> a){var n=a.Select(x=>int.TryParse((x.patientId??"").Replace("P",""),out var v)?v:0).DefaultIfEmpty(0).Max()+1;return $"P{n:000000}";}
@@ -72,3 +80,5 @@ public class V2Booking{public string id{get;set;}="";public string listId{get;se
 public class V2Audit{public DateTime time{get;set;}public string actor{get;set;}="";public string action{get;set;}="";public string detail{get;set;}="";public string device{get;set;}="";}
 public class V2StateChange{public string state{get;set;}="";public string actor{get;set;}="";}
 public class V2DoctorInput{public string name{get;set;}="";public string actor{get;set;}="";}
+
+public class V2Alert{public string type{get;set;}="";public DateTime date{get;set;}public string severity{get;set;}="warning";public string message{get;set;}="";}

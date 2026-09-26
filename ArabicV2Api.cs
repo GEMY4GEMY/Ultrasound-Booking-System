@@ -66,9 +66,18 @@ public static class ArabicV2Api
             a.Add(x);Write(listsFile,a);Audit(auditFile,x.actor,"إنشاء قائمة",$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
         });
         app.MapPut("/api/v2/lists/{id}/state",async(string id,HttpRequest r)=>{
-            var c=await JsonSerializer.DeserializeAsync<V2StateChange>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
-            if(c==null||x==null)return Results.NotFound();var old=x.state;x.state=c.state;x.updatedAt=DateTime.Now;x.modifiedBy=c.actor;Write(listsFile,a);
-            Audit(auditFile,c.actor,"تغيير حالة القائمة",$"{x.doctor} - {x.shift}: {old} ← {x.state}",r);return Results.Ok(x);
+            var sc=await JsonSerializer.DeserializeAsync<V2StateChange>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
+            if(sc==null||x==null)return Results.NotFound();if(!new[]{"مفتوحة","مقفلة","مكتملة"}.Contains(sc.state))return Results.BadRequest(new{error="invalid_state"});
+            var old=x.state;x.state=sc.state;x.updatedAt=DateTime.Now;x.modifiedBy=sc.actor;Write(listsFile,a);
+            Audit(auditFile,sc.actor,"تغيير حالة القائمة",$"{x.doctor} - {x.shift}: {old} ← {x.state}",r);return Results.Ok(x);
+        });
+        app.MapPut("/api/v2/lists/{id}",async(string id,HttpRequest r)=>{
+            var n=await JsonSerializer.DeserializeAsync<V2ListEdit>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
+            if(n==null||x==null)return Results.NotFound();if(string.IsNullOrWhiteSpace(n.doctor)||!new[]{"صباحي","مسائي"}.Contains(n.shift))return Results.BadRequest(new{error="invalid_data"});
+            if(a.Any(z=>z.id!=id&&z.date.Date==n.date.Date&&z.doctor==n.doctor&&z.shift==n.shift))return Results.Conflict(new{error="list_exists"});
+            var old=$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}";x.date=n.date.Date;x.doctor=n.doctor.Trim();x.shift=n.shift;x.updatedAt=DateTime.Now;x.modifiedBy=n.actor;Write(listsFile,a);
+            var bs=Read<V2Booking>(bookingsFile);foreach(var b in bs.Where(z=>z.listId==id)){b.date=x.date;b.doctor=x.doctor;b.shift=x.shift;b.updatedAt=DateTime.Now;}Write(bookingsFile,bs);
+            Audit(auditFile,n.actor,"تعديل قائمة",$"{old} ← {x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
         });
 
         app.MapGet("/api/v2/bookings",(bool includeDeleted=false)=>Results.Json(Read<V2Booking>(bookingsFile).Where(x=>includeDeleted||!x.isDeleted).OrderByDescending(x=>x.createdAt)));
@@ -173,3 +182,5 @@ public class V2DeleteBooking{public string actor{get;set;}="";public string reas
 
 public class V2Settings{public int[] workingDays{get;set;}=[];public int duplicateNameDays{get;set;}=30;public bool requireMorning{get;set;}=true;public bool requireEvening{get;set;}=true;public DateTime alertsStartDate{get;set;}=DateTime.Today;}
 public class V2SettingsUpdate{public string pin{get;set;}="";public string actor{get;set;}="";public V2Settings? settings{get;set;}}
+
+public class V2ListEdit{public DateTime date{get;set;}public string doctor{get;set;}="";public string shift{get;set;}="صباحي";public string actor{get;set;}="";}

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Globalization;
 
 public static class ArabicV2Api
 {
@@ -144,8 +145,8 @@ public static class ArabicV2Api
             }finally{mutationGate.Release();}
         });
         app.MapGet("/api/v2/patients/search",(string q)=>{
-            q=(q??"").Trim().ToLowerInvariant();if(q.Length<2)return Results.Json(Array.Empty<V2Booking>());
-            var a=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&((x.patientName??"").ToLowerInvariant().Contains(q)||(x.phone??"").Contains(q)||(x.patientId??"").ToLowerInvariant().Contains(q))).OrderByDescending(x=>x.date).Take(50);
+            q=(q??"").Trim();if(q.Length<2)return Results.Json(Array.Empty<V2Booking>());var nq=NormalizeName(q);
+            var a=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&(NormalizeName(x.patientName).Contains(nq)||(x.phone??"").Contains(q)||(x.patientId??"").Contains(q,StringComparison.OrdinalIgnoreCase))).OrderByDescending(x=>x.date).Take(50);
             return Results.Json(a);
         });
         app.MapGet("/api/v2/patients/by-phone",(string phone)=>{
@@ -174,6 +175,7 @@ public static class ArabicV2Api
             return Results.Json(alerts.OrderByDescending(x=>x.date).ThenBy(x=>x.type));
         });
     }
+    static string NormalizeName(string? s){if(string.IsNullOrWhiteSpace(s))return "";var t=s.Normalize(NormalizationForm.FormD);var sb=new StringBuilder();foreach(var ch in t){if(CharUnicodeInfo.GetUnicodeCategory(ch)!=UnicodeCategory.NonSpacingMark)sb.Append(ch);}return sb.ToString().Normalize(NormalizationForm.FormC).Replace("ـ","").Replace("أ","ا").Replace("إ","ا").Replace("آ","ا").Replace("ى","ي").Replace("ؤ","و").Replace("ئ","ي").Replace("ة","ه").ToLowerInvariant().Trim();}
     static string NextPatientId(List<V2Booking> a){var n=a.Select(x=>int.TryParse((x.patientId??"").Replace("P",""),out var v)?v:0).DefaultIfEmpty(0).Max()+1;return $"P{n:000000}";}
     static void Audit(string f,string actor,string action,string detail,HttpRequest r){lock(DataLock){var a=Read<V2Audit>(f);a.Add(new V2Audit{time=DateTime.Now,actor=string.IsNullOrWhiteSpace(actor)?"غير محدد":actor,action=action,detail=detail,device=r.Headers["User-Agent"].ToString()});Write(f,a);}}
     static string HashPin(string s)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s??"")));

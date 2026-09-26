@@ -51,6 +51,13 @@ public static class ArabicV2Api
             Audit(auditFile,n.actor,"تعديل حجز",$"{n.patientId} - {n.patientName}",r);return Results.Ok(n);
         });
         app.MapGet("/api/v2/audit",()=>Results.Json(Read<V2Audit>(auditFile).OrderByDescending(x=>x.time).Take(1000)));
+        app.MapGet("/api/v2/admin/summary",()=>Results.Ok(new{
+            doctors=Read<string>(doctorsFile).Count,
+            lists=Read<V2DailyList>(listsFile).Count,
+            bookings=Read<V2Booking>(bookingsFile).Count,
+            dataPath=dataDir,
+            server=Environment.MachineName
+        }));
         app.MapGet("/api/v2/alerts",()=>{
             var lists=Read<V2DailyList>(listsFile);var today=DateTime.Today;var alerts=new List<V2Alert>();
             var dates=lists.Select(x=>x.date.Date).Distinct().Where(d=>d<=today).OrderByDescending(d=>d).ToList();

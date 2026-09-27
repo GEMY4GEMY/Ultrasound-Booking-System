@@ -22,13 +22,13 @@ public static class ArabicV2Api
         bool IsAdmin(HttpRequest r){var t=r.Headers["X-Admin-Token"].ToString();lock(adminTokens){return !string.IsNullOrWhiteSpace(t)&&adminTokens.TryGetValue(t,out var exp)&&exp>DateTime.Now;}}
         Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]"); Init(patientsFile,"[]");
         Init(doctorsFile,JsonSerializer.Serialize(new[]{"د. أحمد","د. محمد"}));
-        Init(adminFile,JsonSerializer.Serialize(new V2AdminConfig{pinHash=HashPin("1234")}));
+        Init(adminFile,JsonSerializer.Serialize(NewAdminConfig("1234")));
         Init(settingsFile,JsonSerializer.Serialize(new V2Settings{workingDays=new[]{0,1,2,3,4,6},duplicateNameDays=30,requireMorning=true,requireEvening=true,alertsStartDate=DateTime.Today}));
         if(Read<V2Patient>(patientsFile).Count==0){var historic=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&!string.IsNullOrWhiteSpace(x.patientId)).GroupBy(x=>x.patientId,StringComparer.OrdinalIgnoreCase).Select(g=>g.OrderByDescending(x=>x.createdAt).First()).Select(x=>new V2Patient{patientId=x.patientId,patientName=x.patientName,phone=x.phone,createdAt=x.createdAt,updatedAt=x.updatedAt}).ToList();if(historic.Count>0)Write(patientsFile,historic);}
 
         app.MapPost("/api/v2/admin/login",async(HttpRequest r)=>{
             var x=await JsonSerializer.DeserializeAsync<V2AdminLogin>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
-            if(x==null||cfg.pinHash!=HashPin(x.pin))return Results.Unauthorized();
+            if(x==null||!VerifyPin(cfg,x.pin))return Results.Unauthorized();if(string.IsNullOrWhiteSpace(cfg.pinSalt)||cfg.pinIterations<=0){cfg=NewAdminConfig(x.pin);lock(DataLock)AtomicWrite(adminFile,JsonSerializer.Serialize(cfg,new JsonSerializerOptions{WriteIndented=true}));Audit(auditFile,x.actor,"ترقية أمان PIN الأدمن","تم ترقية تخزين PIN إلى PBKDF2",r);}
             var token=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));lock(adminTokens)adminTokens[token]=DateTime.Now.AddHours(8);Audit(auditFile,x.actor,"دخول لوحة الأدمن","تم فتح لوحة الأدمن",r);return Results.Ok(new{ok=true,token});
         });
         app.MapPost("/api/v2/admin/logout",(HttpRequest r)=>{
@@ -36,8 +36,8 @@ public static class ArabicV2Api
         });
         app.MapPost("/api/v2/admin/change-pin",async(HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2AdminPinChange>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
-            if(x==null||cfg.pinHash!=HashPin(x.oldPin)||string.IsNullOrWhiteSpace(x.newPin)||x.newPin.Length<4)return Results.BadRequest();
-            cfg.pinHash=HashPin(x.newPin);lock(DataLock)AtomicWrite(adminFile,JsonSerializer.Serialize(cfg,new JsonSerializerOptions{WriteIndented=true}));
+            if(x==null||!VerifyPin(cfg,x.oldPin)||string.IsNullOrWhiteSpace(x.newPin)||!System.Text.RegularExpressions.Regex.IsMatch(x.newPin,"^\\d{4,}$"))return Results.BadRequest();
+            cfg=NewAdminConfig(x.newPin);lock(DataLock)AtomicWrite(adminFile,JsonSerializer.Serialize(cfg,new JsonSerializerOptions{WriteIndented=true}));
             Audit(auditFile,x.actor,"تغيير PIN الأدمن","تم تغيير رمز لوحة الأدمن",r);return Results.Ok();
         });
         app.MapDelete("/api/v2/doctors", (string name,string actor,HttpRequest r)=>{
@@ -216,6 +216,8 @@ public static class ArabicV2Api
     static string NextPatientId(List<V2Patient> a){var n=a.Select(x=>int.TryParse((x.patientId??"").Replace("P",""),out var v)?v:0).DefaultIfEmpty(0).Max()+1;return $"P{n:000000}";}
     static void Audit(string f,string actor,string action,string detail,HttpRequest r){lock(DataLock){var a=Read<V2Audit>(f);a.Add(new V2Audit{time=DateTime.Now,actor=string.IsNullOrWhiteSpace(actor)?"غير محدد":actor,action=action,detail=detail,device=r.Headers["User-Agent"].ToString()});Write(f,a);}}
     static string HashPin(string s)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s??"")));
+    static V2AdminConfig NewAdminConfig(string pin){var salt=RandomNumberGenerator.GetBytes(16);const int iterations=120000;var hash=Rfc2898DeriveBytes.Pbkdf2(pin??"",salt,iterations,HashAlgorithmName.SHA256,32);return new V2AdminConfig{pinHash=Convert.ToHexString(hash),pinSalt=Convert.ToBase64String(salt),pinIterations=iterations};}
+    static bool VerifyPin(V2AdminConfig cfg,string pin){if(string.IsNullOrWhiteSpace(cfg.pinSalt)||cfg.pinIterations<=0)return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(cfg.pinHash??""),Convert.FromHexString(HashPin(pin)));try{var salt=Convert.FromBase64String(cfg.pinSalt);var actual=Rfc2898DeriveBytes.Pbkdf2(pin??"",salt,cfg.pinIterations,HashAlgorithmName.SHA256,32);return CryptographicOperations.FixedTimeEquals(actual,Convert.FromHexString(cfg.pinHash));}catch{return false;}}
     static T ReadOne<T>(string p) where T:new(){lock(DataLock)return JsonSerializer.Deserialize<T>(File.ReadAllText(p))??new T();}
     static void Init(string p,string v){lock(DataLock){if(!File.Exists(p))File.WriteAllText(p,v);}}
     static List<T> Read<T>(string p){lock(DataLock)return JsonSerializer.Deserialize<List<T>>(File.ReadAllText(p))??[];}
@@ -231,7 +233,7 @@ public class V2DoctorInput{public string name{get;set;}="";public string actor{g
 
 public class V2Alert{public string type{get;set;}="";public DateTime date{get;set;}public string severity{get;set;}="warning";public string message{get;set;}="";}
 
-public class V2AdminConfig{public string pinHash{get;set;}="";}
+public class V2AdminConfig{public string pinHash{get;set;}="";public string pinSalt{get;set;}="";public int pinIterations{get;set;}=0;}
 public class V2AdminLogin{public string pin{get;set;}="";public string actor{get;set;}="";}
 public class V2AdminPinChange{public string oldPin{get;set;}="";public string newPin{get;set;}="";public string actor{get;set;}="";}
 

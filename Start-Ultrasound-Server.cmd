@@ -31,8 +31,9 @@ echo Address for other computers on the same network:
 echo   http://%LANIP%:5090
 echo.
 echo Keep this window open while other computers use the system.
+echo Daily staff use their operator name only. Admin settings use a separate PIN.
 echo.
-start "" "http://localhost:5090"
+start "" cmd /c "timeout /t 2 /nobreak >nul && start \"\" http://localhost:5090"
 "%EXE%"
 
 echo.

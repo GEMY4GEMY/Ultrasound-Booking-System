@@ -67,5 +67,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload latest "Ultrasound-Booking-System-Windows-x64.zip" --clobber
+          $asset = "Ultrasound-Booking-System-Windows-x64.zip"
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            gh release upload latest $asset --clobber
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($attempt -lt 3) { Start-Sleep -Seconds (5 * $attempt) }
+          }
+          throw "Release upload failed after 3 attempts"
 

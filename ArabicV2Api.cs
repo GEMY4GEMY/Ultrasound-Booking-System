@@ -151,7 +151,7 @@ public static class ArabicV2Api
         app.MapDelete("/api/v2/bookings/{id}",async(string id,HttpRequest r)=>{
             await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2DeleteBooking>(r.Body);var a=Read<V2Booking>(bookingsFile);var b=a.FirstOrDefault(z=>z.id==id);
-            if(x==null||b==null)return Results.NotFound();b.isDeleted=true;b.deletedAt=DateTime.Now;b.deletedBy=x.actor;b.updatedAt=DateTime.Now;Write(bookingsFile,a);
+            if(x==null||b==null)return Results.NotFound();var deleteSource=Read<V2DailyList>(listsFile).FirstOrDefault(z=>z.id==b.listId);if(deleteSource?.state=="مكتملة")return Results.Conflict(new{error="list_completed"});if(string.IsNullOrWhiteSpace(x.reason))return Results.BadRequest(new{error="reason_required"});b.isDeleted=true;b.deletedAt=DateTime.Now;b.deletedBy=x.actor;b.updatedAt=DateTime.Now;Write(bookingsFile,a);
             Audit(auditFile,x.actor,"حذف حالة",$"{b.patientId} - {b.patientName} - السبب: {x.reason}",r);return Results.Ok();
             }finally{mutationGate.Release();}
         });

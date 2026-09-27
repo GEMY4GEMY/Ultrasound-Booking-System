@@ -96,7 +96,7 @@ public static class ArabicV2Api
         app.MapPost("/api/v2/lists",async(HttpRequest r)=>{
             await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2DailyList>(r.Body);
-            if(x==null||string.IsNullOrWhiteSpace(x.doctor)||string.IsNullOrWhiteSpace(x.shift))return Results.BadRequest();
+            if(x==null||string.IsNullOrWhiteSpace(x.doctor)||x.date==default||!new[]{"صباحي","مسائي"}.Contains(x.shift))return Results.BadRequest(new{error="invalid_data"});
             var a=Read<V2DailyList>(listsFile);
             if(a.Any(z=>z.date.Date==x.date.Date&&z.doctor==x.doctor&&z.shift==x.shift))return Results.Conflict(new{error="list_exists"});
             x.id=Guid.NewGuid().ToString("N")[..8].ToUpper(); x.state="مفتوحة"; x.createdAt=DateTime.Now; x.updatedAt=DateTime.Now;

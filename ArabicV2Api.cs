@@ -125,7 +125,7 @@ public static class ArabicV2Api
             if(list.state!="مفتوحة")return Results.Conflict(new{error="list_locked"});
             var a=Read<V2Booking>(bookingsFile);var patientRegistry=Read<V2Patient>(patientsFile);x.id=Guid.NewGuid().ToString("N")[..8].ToUpper();
             var samePatient=patientRegistry.Where(z=>z.phone==x.phone).OrderByDescending(z=>z.updatedAt).FirstOrDefault();
-            if(string.IsNullOrWhiteSpace(x.patientId)&&samePatient!=null)x.patientId=samePatient.patientId;
+            if(samePatient!=null)x.patientId=samePatient.patientId;
             if(string.IsNullOrWhiteSpace(x.patientId))x.patientId=NextPatientId(patientRegistry);
             var idOwner=patientRegistry.FirstOrDefault(z=>z.patientId.Equals(x.patientId,StringComparison.OrdinalIgnoreCase));
             if(idOwner!=null&&idOwner.phone!=x.phone)return Results.Conflict(new{error="patient_id_conflict",patientId=x.patientId,existingName=idOwner.patientName});

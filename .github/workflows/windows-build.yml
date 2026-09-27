@@ -130,7 +130,14 @@ jobs:
             try { Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id + "/move") -ContentType "application/json; charset=utf-8" -Body $moveBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $moveRejected = $true } else { throw } }
             if (-not $moveRejected) { throw "Booking moved into a locked target list" }
-            Write-Host "Runtime workflow smoke test passed: booking flow, validation, completed-list locks and locked-target move protection."
+            $openTargetBody = @{ state="مفتوحة"; actor="CI Smoke Test" } | ConvertTo-Json
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5090/api/v2/lists/" + $target.id + "/state") -ContentType "application/json; charset=utf-8" -Body $openTargetBody | Out-Null
+            $moved = Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id + "/move") -ContentType "application/json; charset=utf-8" -Body $moveBody
+            if ($moved.listId -ne $target.id) { throw "Moved booking did not receive target list ID" }
+            if ([string]$moved.doctor -ne [string]$target.doctor) { throw "Moved booking doctor does not match target list" }
+            if ([string]$moved.shift -ne [string]$target.shift) { throw "Moved booking shift does not match target list" }
+            if ((Get-Date $moved.date).Date -ne (Get-Date $target.date).Date) { throw "Moved booking date does not match target list" }
+            Write-Host "Runtime workflow smoke test passed: booking flow, validation, list locks and successful move consistency."
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }

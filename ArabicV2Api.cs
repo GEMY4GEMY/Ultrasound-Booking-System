@@ -59,11 +59,14 @@ public static class ArabicV2Api
             if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2RestoreRequest>(r.Body);if(x==null||string.IsNullOrWhiteSpace(x.folder))return Results.BadRequest();
             var safeName=Path.GetFileName(x.folder);if(safeName!=x.folder)return Results.BadRequest(new{error="invalid_backup"});
             var source=Path.Combine(dataDir,"backups-v2",safeName);if(!Directory.Exists(source))return Results.NotFound();
+            var required=new[]{listsFile,bookingsFile,doctorsFile,settingsFile};if(required.Any(file=>!File.Exists(Path.Combine(source,Path.GetFileName(file)))))return Results.BadRequest(new{error="incomplete_backup"});
             await mutationGate.WaitAsync();try{
                 var safetyStamp="before_restore_"+DateTime.Now.ToString("yyyyMMdd_HHmmss");var safety=Path.Combine(dataDir,"backups-v2",safetyStamp);Directory.CreateDirectory(safety);
-                var files=new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,adminFile,settingsFile};foreach(var file in files)if(File.Exists(file))File.Copy(file,Path.Combine(safety,Path.GetFileName(file)),true);
-                lock(DataLock){foreach(var file in files){var src=Path.Combine(source,Path.GetFileName(file));if(File.Exists(src))File.Copy(src,file,true);}}
-                Audit(auditFile,x.actor,"استعادة نسخة احتياطية",$"{safeName} - نسخة أمان قبل الاستعادة: {safetyStamp}",r);return Results.Ok(new{restored=safeName,safetyBackup=safetyStamp});
+                var safetyFiles=new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,adminFile,settingsFile};foreach(var file in safetyFiles)if(File.Exists(file))File.Copy(file,Path.Combine(safety,Path.GetFileName(file)),true);
+                var currentAudit=Read<V2Audit>(auditFile);
+                var restoreFiles=new[]{listsFile,bookingsFile,patientsFile,doctorsFile,settingsFile};lock(DataLock){foreach(var file in restoreFiles){var src=Path.Combine(source,Path.GetFileName(file));if(File.Exists(src))File.Copy(src,file,true);}}
+                var backupAuditPath=Path.Combine(source,Path.GetFileName(auditFile));var mergedAudit=(File.Exists(backupAuditPath)?Read<V2Audit>(backupAuditPath):new List<V2Audit>()).Concat(currentAudit).GroupBy(a=>$"{a.time:O}|{a.actor}|{a.action}|{a.detail}|{a.device}").Select(g=>g.First()).OrderBy(a=>a.time).ToList();Write(auditFile,mergedAudit);
+                Audit(auditFile,x.actor,"استعادة نسخة احتياطية",$"{safeName} - نسخة أمان قبل الاستعادة: {safetyStamp} - تم الحفاظ على PIN الأدمن وسجل العمليات",r);return Results.Ok(new{restored=safeName,safetyBackup=safetyStamp,auditEntries=mergedAudit.Count,adminPinPreserved=true});
             }finally{mutationGate.Release();}
         });
 

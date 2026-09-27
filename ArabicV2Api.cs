@@ -14,6 +14,7 @@ public static class ArabicV2Api
         var bookingsFile=Path.Combine(dataDir,"bookings-v2.json");
         var auditFile=Path.Combine(dataDir,"audit-v2.json");
         var doctorsFile=Path.Combine(dataDir,"doctors-v2.json");
+        var insurersFile=Path.Combine(dataDir,"insurers-v2.json");
         var adminFile=Path.Combine(dataDir,"admin-v2.json");
         var settingsFile=Path.Combine(dataDir,"settings-v2.json");
         var patientsFile=Path.Combine(dataDir,"patients-v2.json");
@@ -22,6 +23,7 @@ public static class ArabicV2Api
         bool IsAdmin(HttpRequest r){var t=r.Headers["X-Admin-Token"].ToString();lock(adminTokens){return !string.IsNullOrWhiteSpace(t)&&adminTokens.TryGetValue(t,out var exp)&&exp>DateTime.Now;}}
         Init(listsFile,"[]"); Init(bookingsFile,"[]"); Init(auditFile,"[]"); Init(patientsFile,"[]");
         Init(doctorsFile,JsonSerializer.Serialize(new[]{"د. أحمد","د. محمد"}));
+        Init(insurersFile,"[]");
         Init(adminFile,JsonSerializer.Serialize(NewAdminConfig("1234")));
         Init(settingsFile,JsonSerializer.Serialize(new V2Settings{workingDays=new[]{0,1,2,3,4,6},duplicateNameDays=30,requireMorning=true,requireEvening=true,alertsStartDate=DateTime.Today}));
         if(Read<V2Patient>(patientsFile).Count==0){var historic=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&!string.IsNullOrWhiteSpace(x.patientId)).GroupBy(x=>x.patientId,StringComparer.OrdinalIgnoreCase).Select(g=>g.OrderByDescending(x=>x.createdAt).First()).Select(x=>new V2Patient{patientId=x.patientId,patientName=x.patientName,phone=x.phone,createdAt=x.createdAt,updatedAt=x.updatedAt}).ToList();if(historic.Count>0)Write(patientsFile,historic);}
@@ -47,7 +49,7 @@ public static class ArabicV2Api
         app.MapPost("/api/v2/admin/backup",(string actor,HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();
             var stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dataDir,"backups-v2",stamp);Directory.CreateDirectory(bd);
-            foreach(var file in new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,adminFile,settingsFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
+            foreach(var file in new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,insurersFile,adminFile,settingsFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
             Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
         });
 
@@ -77,6 +79,10 @@ public static class ArabicV2Api
             lock(DataLock)AtomicWrite(settingsFile,JsonSerializer.Serialize(s,new JsonSerializerOptions{WriteIndented=true}));
             Audit(auditFile,x.actor,"تعديل إعدادات التشغيل",$"أيام العمل: {string.Join(",",s.workingDays)} - فترة التكرار: {s.duplicateNameDays} يوم",r);return Results.Ok(s);
         });
+
+        app.MapGet("/api/v2/insurers",()=>Results.Json(Read<string>(insurersFile)));
+        app.MapPost("/api/v2/insurers",async(HttpRequest r)=>{if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2DoctorInput>(r.Body);if(x==null||string.IsNullOrWhiteSpace(x.name))return Results.BadRequest();var a=Read<string>(insurersFile);if(!a.Contains(x.name.Trim()))a.Add(x.name.Trim());Write(insurersFile,a);Audit(auditFile,x.actor,"إضافة جهة تأمين",x.name,r);return Results.Ok();});
+        app.MapDelete("/api/v2/insurers",(string name,string actor,HttpRequest r)=>{if(!IsAdmin(r))return Results.Unauthorized();var a=Read<string>(insurersFile);a.RemoveAll(x=>x==name);Write(insurersFile,a);Audit(auditFile,actor,"حذف جهة تأمين",name,r);return Results.Ok();});
 
         app.MapGet("/api/v2/doctors",()=>Results.Json(Read<string>(doctorsFile)));
         app.MapPost("/api/v2/doctors",async(HttpRequest r)=>{
@@ -226,7 +232,7 @@ public static class ArabicV2Api
 }
 public class V2DailyList{public string id{get;set;}="";public DateTime date{get;set;}public string doctor{get;set;}="";public string shift{get;set;}="صباحي";public string state{get;set;}="مفتوحة";public string actor{get;set;}="";public string modifiedBy{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
 public class V2Patient{public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
-public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string status{get;set;}="محجوز";public bool isDeleted{get;set;}=false;public DateTime? deletedAt{get;set;}public string deletedBy{get;set;}="";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
+public class V2Booking{public string id{get;set;}="";public string listId{get;set;}="";public string patientId{get;set;}="";public string patientName{get;set;}="";public string phone{get;set;}="";public string contractType{get;set;}="نقدي";public string insurer{get;set;}="";public string exam{get;set;}="";public string doctor{get;set;}="";public string shift{get;set;}="";public DateTime date{get;set;}public string notes{get;set;}="";public string status{get;set;}="محجوز";public bool isDeleted{get;set;}=false;public DateTime? deletedAt{get;set;}public string deletedBy{get;set;}="";public string actor{get;set;}="";public DateTime createdAt{get;set;}public DateTime updatedAt{get;set;}}
 public class V2Audit{public DateTime time{get;set;}public string actor{get;set;}="";public string action{get;set;}="";public string detail{get;set;}="";public string device{get;set;}="";}
 public class V2StateChange{public string state{get;set;}="";public string actor{get;set;}="";}
 public class V2DoctorInput{public string name{get;set;}="";public string actor{get;set;}="";}

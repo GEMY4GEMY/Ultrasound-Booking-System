@@ -137,6 +137,7 @@ public static class ArabicV2Api
             await mutationGate.WaitAsync();try{
             var n=await JsonSerializer.DeserializeAsync<V2Booking>(r.Body);var a=Read<V2Booking>(bookingsFile);var i=a.FindIndex(z=>z.id==id);
             if(n==null||i<0)return Results.NotFound();var sourceList=Read<V2DailyList>(listsFile).FirstOrDefault(z=>z.id==a[i].listId);if(sourceList?.state=="مكتملة")return Results.Conflict(new{error="list_completed"});if(!System.Text.RegularExpressions.Regex.IsMatch(n.phone??"","^\\d{11}$"))return Results.BadRequest(new{error="invalid_phone"});
+            var originalPatientId=a[i].patientId;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?originalPatientId:n.patientId.Trim();if(!n.patientId.Equals(originalPatientId,StringComparison.OrdinalIgnoreCase))return Results.Conflict(new{error="patient_id_locked"});var registryCheck=Read<V2Patient>(patientsFile);var phoneOwner=registryCheck.FirstOrDefault(p=>p.phone==n.phone&&!p.patientId.Equals(originalPatientId,StringComparison.OrdinalIgnoreCase));if(phoneOwner!=null)return Results.Conflict(new{error="phone_belongs_to_other_patient",existingPatientId=phoneOwner.patientId,existingName=phoneOwner.patientName});
             var old=a[i];var changes=new List<string>();
             if(old.patientName!=n.patientName)changes.Add($"الاسم: {old.patientName} ← {n.patientName}");
             if(old.phone!=n.phone)changes.Add($"الهاتف: {old.phone} ← {n.phone}");

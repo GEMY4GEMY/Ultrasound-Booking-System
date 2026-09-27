@@ -48,8 +48,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view latest *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $exists = gh release list --json tagName --jq 'any(.[]; .tagName == "latest")'
+          if ($exists -eq "true") {
             gh release upload latest "Ultrasound-Booking-System-Windows-x64.zip" --clobber
           } else {
             gh release create latest "Ultrasound-Booking-System-Windows-x64.zip" --target "${{ github.sha }}" --title "Ultrasound Booking System - Latest Windows x64" --notes "Portable Windows x64 build. Extract the ZIP and run Start-Ultrasound-Server.cmd."

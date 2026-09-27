@@ -101,7 +101,12 @@ jobs:
             try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $badBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $rejected = $true } else { throw } }
             if (-not $rejected) { throw "Insured booking without insurer was accepted" }
-            Write-Host "Runtime workflow smoke test passed: list, cash booking, patient lookup and insurer validation."
+            $badDoctorBody = @{ date=$testDate; doctor="CI Unregistered Doctor"; shift="مسائي"; actor="CI Smoke Test" } | ConvertTo-Json
+            $doctorRejected = $false
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $badDoctorBody | Out-Null }
+            catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $doctorRejected = $true } else { throw } }
+            if (-not $doctorRejected) { throw "Daily list accepted an unregistered doctor" }
+            Write-Host "Runtime workflow smoke test passed: list, cash booking, patient lookup, insurer validation and doctor validation."
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }

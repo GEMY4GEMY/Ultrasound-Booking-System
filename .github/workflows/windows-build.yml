@@ -1,4 +1,6 @@
 name: Windows x64 Build
+permissions:
+  contents: write
 on:
   push:
     branches: [ "main" ]
@@ -37,3 +39,14 @@ jobs:
         with:
           name: Ultrasound-Booking-System-Windows-x64
           path: publish
+      - name: Create release ZIP
+        shell: powershell
+        run: Compress-Archive -Path publish\\* -DestinationPath Ultrasound-Booking-System-Windows-x64.zip -Force
+      - name: Publish latest release
+        if: github.ref == 'refs/heads/main'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes 2>$null
+          gh release create latest "Ultrasound-Booking-System-Windows-x64.zip" --target "${{ github.sha }}" --title "Ultrasound Booking System - Latest Windows x64" --notes "Portable Windows x64 build. Extract the ZIP and run Start-Ultrasound-Server.cmd."

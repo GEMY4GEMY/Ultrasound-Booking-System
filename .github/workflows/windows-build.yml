@@ -82,6 +82,20 @@ jobs:
             foreach ($fn in @('openListDialog','quick','openAdmin','openAbout','saveBooking')) {
               if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }
             }
+            $adminOkBody = @{ pin="1234"; actor="CI Admin Test" } | ConvertTo-Json
+            $adminOk = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $adminOkBody
+            if (-not $adminOk.token) { throw "Default admin PIN did not return an admin token" }
+            $badAdminBody = @{ pin="9999"; actor="CI Admin Test" } | ConvertTo-Json
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+              $badRejected = $false
+              try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $badAdminBody | Out-Null }
+              catch { if ($_.Exception.Response.StatusCode.value__ -eq 401) { $badRejected = $true } else { throw } }
+              if (-not $badRejected) { throw "Invalid admin PIN attempt $attempt was not rejected with 401" }
+            }
+            $lockedAdmin = $false
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $adminOkBody | Out-Null }
+            catch { if ($_.Exception.Response.StatusCode.value__ -eq 429) { $lockedAdmin = $true } else { throw } }
+            if (-not $lockedAdmin) { throw "Admin brute-force lockout did not activate after five failed PIN attempts" }
             $lists = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/lists"
             $doctors = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/doctors"
             if (-not $doctors -or $doctors.Count -lt 1) { throw "No doctor is available for booking smoke test" }
@@ -148,7 +162,7 @@ jobs:
             try { Invoke-RestMethod -Method Delete -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id) -ContentType "application/json; charset=utf-8" -Body $deleteBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $repeatDeleteRejected = $true } else { throw } }
             if (-not $repeatDeleteRejected) { throw "Repeated booking deletion was accepted" }
-            Write-Host "Runtime workflow smoke test passed: booking flow, validation, list locks, move consistency and soft-delete integrity."
+            Write-Host "Runtime workflow smoke test passed: admin security, booking flow, validation, list locks, move consistency and soft-delete integrity."
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }

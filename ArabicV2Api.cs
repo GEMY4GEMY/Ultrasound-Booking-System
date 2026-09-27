@@ -149,6 +149,7 @@ public static class ArabicV2Api
             if(old.phone!=n.phone)changes.Add($"الهاتف: {old.phone} ← {n.phone}");
             if(old.exam!=n.exam)changes.Add($"الفحص: {old.exam} ← {n.exam}");
             if(old.contractType!=n.contractType)changes.Add($"التعاقد: {old.contractType} ← {n.contractType}");
+            if(old.insurer!=n.insurer)changes.Add($"جهة التأمين: {old.insurer} ← {n.insurer}");
             if(old.notes!=n.notes)changes.Add("تم تعديل الملاحظات");
             n.id=id;n.patientId=string.IsNullOrWhiteSpace(n.patientId)?old.patientId:n.patientId;n.createdAt=old.createdAt;n.status=old.status;n.isDeleted=old.isDeleted;n.deletedAt=old.deletedAt;n.deletedBy=old.deletedBy;n.updatedAt=DateTime.Now;a[i]=n;Write(bookingsFile,a);var ps=Read<V2Patient>(patientsFile);var pi=ps.FindIndex(p=>p.patientId.Equals(n.patientId,StringComparison.OrdinalIgnoreCase));if(pi>=0){ps[pi].patientName=n.patientName;ps[pi].phone=n.phone;ps[pi].updatedAt=DateTime.Now;Write(patientsFile,ps);}
             Audit(auditFile,n.actor,"تعديل بيانات",$"{n.patientId} - {n.patientName}: {(changes.Count>0?string.Join(" | ",changes):"بدون تغيير")}",r);return Results.Ok(n);
@@ -186,7 +187,7 @@ public static class ArabicV2Api
         });
         app.MapGet("/api/v2/patients/{patientId}/history",(string patientId)=>{
             var p=Read<V2Patient>(patientsFile).FirstOrDefault(x=>x.patientId.Equals(patientId,StringComparison.OrdinalIgnoreCase));if(p==null)return Results.NotFound();
-            var history=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.patientId.Equals(patientId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>x.date).ThenByDescending(x=>x.createdAt).Select(x=>new{x.id,x.date,x.doctor,x.shift,x.exam,x.contractType,x.status,x.notes,x.createdAt}).ToList();
+            var history=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.patientId.Equals(patientId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>x.date).ThenByDescending(x=>x.createdAt).Select(x=>new{x.id,x.date,x.doctor,x.shift,x.exam,x.contractType,x.insurer,x.status,x.notes,x.createdAt}).ToList();
             return Results.Ok(new{p.patientId,p.patientName,p.phone,total=history.Count,history});
         });
         app.MapGet("/api/v2/patients/by-phone",(string phone)=>{

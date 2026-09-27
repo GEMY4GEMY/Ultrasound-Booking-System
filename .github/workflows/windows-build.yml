@@ -49,5 +49,3 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload latest "Ultrasound-Booking-System-Windows-x64.zip" --clobber
-            gh release create latest "Ultrasound-Booking-System-Windows-x64.zip" --target "${{ github.sha }}" --title "Ultrasound Booking System - Latest Windows x64" --notes "Portable Windows x64 build. Extract the ZIP and run Start-Ultrasound-Server.cmd."
-          }

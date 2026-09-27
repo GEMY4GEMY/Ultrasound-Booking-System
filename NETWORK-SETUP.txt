@@ -20,7 +20,7 @@ OTHER COMPUTERS
 2. Open Microsoft Edge, Google Chrome, or another modern browser.
 3. Enter the address shown by Start-Ultrasound-Server.cmd, for example:
    http://192.168.1.20:5090
-4. Sign in using an account created by the administrator.
+4. The first time the page opens, enter the employee/operator name. No user account or login is required.
 
 IMPORTANT
 ---------
@@ -29,8 +29,9 @@ IMPORTANT
 - Data and backups remain on the server computer.
 - Use a Private Windows network profile for the department LAN.
 - Do not expose port 5090 directly to the public Internet.
-- Change the initial administrator password before routine use.
-- Take regular backups from the Backup screen.
+- The Admin panel is separate from normal operation and is protected by an Admin PIN. Change the initial Admin PIN before routine use.
+- Take regular backups from the Admin panel. Restore automatically creates a safety backup first.
+- Normal staff do not need an Admin PIN for daily lists and bookings.
 
 QUICK TEST
 ----------
@@ -41,3 +42,10 @@ On another computer replace localhost with the server IPv4 address:
 http://SERVER-IP:5090/api/health
 
 A working server returns status "ok".
+
+If another computer cannot connect:
+1. Confirm the server window is still open.
+2. Confirm both computers are on the same LAN/router.
+3. Confirm the Windows network profile on the server is Private.
+4. Run Setup-Network-Firewall.cmd again as Administrator.
+5. On the client computer open http://SERVER-IP:5090/api/health first, then open http://SERVER-IP:5090.

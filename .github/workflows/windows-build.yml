@@ -21,6 +21,22 @@ jobs:
       - name: Validate frontend JavaScript syntax
         shell: powershell
         run: node --check wwwroot/arabic-v2.js
+      - name: Validate V2 dialog references
+        shell: powershell
+        run: |
+          $html = Get-Content "wwwroot/index.html" -Raw
+          $js = Get-Content "wwwroot/arabic-v2.js" -Raw
+          $ids = [regex]::Matches($html, 'id="([^"]+Dlg)"') | ForEach-Object { $_.Groups[1].Value }
+          $refs = [regex]::Matches($js, "([A-Za-z_][A-Za-z0-9_]*Dlg)=el\('([^']+Dlg)'\)") 
+          foreach ($m in $refs) {
+            $id = $m.Groups[2].Value
+            if ($ids -notcontains $id) { throw "JavaScript dialog reference has no matching HTML id: $id" }
+          }
+          foreach ($id in $ids) {
+            if ($js -match "\b$id\.(showModal|close)\(" -and $js -notmatch "$id=el\('$id'\)") {
+              throw "Dialog used without explicit JavaScript reference: $id"
+            }
+          }
       - name: Publish Windows x64
         run: dotnet publish --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output publish
       - name: Add network deployment tools

@@ -177,6 +177,11 @@ public static class ArabicV2Api
                 .Select(p=>{var b=bookings.Where(x=>x.patientId.Equals(p.patientId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>x.date).ThenByDescending(x=>x.createdAt).FirstOrDefault();return new{p.patientId,p.patientName,p.phone,lastDate=b?.date,lastDoctor=b?.doctor??"",lastShift=b?.shift??"",lastExam=b?.exam??""};});
             return Results.Json(patients);
         });
+        app.MapGet("/api/v2/patients/{patientId}/history",(string patientId)=>{
+            var p=Read<V2Patient>(patientsFile).FirstOrDefault(x=>x.patientId.Equals(patientId,StringComparison.OrdinalIgnoreCase));if(p==null)return Results.NotFound();
+            var history=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.patientId.Equals(patientId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>x.date).ThenByDescending(x=>x.createdAt).Select(x=>new{x.id,x.date,x.doctor,x.shift,x.exam,x.contractType,x.status,x.notes,x.createdAt}).ToList();
+            return Results.Ok(new{p.patientId,p.patientName,p.phone,total=history.Count,history});
+        });
         app.MapGet("/api/v2/patients/by-phone",(string phone)=>{
             var p=Read<V2Patient>(patientsFile).Where(x=>x.phone==phone).OrderByDescending(x=>x.updatedAt).FirstOrDefault();if(p==null)return Results.NotFound();
             var b=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&x.patientId.Equals(p.patientId,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>x.date).ThenByDescending(x=>x.createdAt).FirstOrDefault();

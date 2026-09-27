@@ -137,7 +137,18 @@ jobs:
             if ([string]$moved.doctor -ne [string]$target.doctor) { throw "Moved booking doctor does not match target list" }
             if ([string]$moved.shift -ne [string]$target.shift) { throw "Moved booking shift does not match target list" }
             if ((Get-Date $moved.date).Date -ne (Get-Date $target.date).Date) { throw "Moved booking date does not match target list" }
-            Write-Host "Runtime workflow smoke test passed: booking flow, validation, list locks and successful move consistency."
+            $deleteBody = @{ reason="CI cleanup verification"; actor="CI Smoke Test" } | ConvertTo-Json
+            Invoke-RestMethod -Method Delete -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id) -ContentType "application/json; charset=utf-8" -Body $deleteBody | Out-Null
+            $visibleBookings = @(Invoke-RestMethod "http://127.0.0.1:5090/api/v2/bookings")
+            if ($visibleBookings | Where-Object { $_.id -eq $booking.id }) { throw "Soft-deleted booking remained visible in normal booking list" }
+            $allBookings = @(Invoke-RestMethod "http://127.0.0.1:5090/api/v2/bookings?includeDeleted=true")
+            $deleted = $allBookings | Where-Object { $_.id -eq $booking.id }
+            if (-not $deleted -or -not $deleted.isDeleted) { throw "Soft-deleted booking was not retained for audit/history storage" }
+            $repeatDeleteRejected = $false
+            try { Invoke-RestMethod -Method Delete -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id) -ContentType "application/json; charset=utf-8" -Body $deleteBody | Out-Null }
+            catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $repeatDeleteRejected = $true } else { throw } }
+            if (-not $repeatDeleteRejected) { throw "Repeated booking deletion was accepted" }
+            Write-Host "Runtime workflow smoke test passed: booking flow, validation, list locks, move consistency and soft-delete integrity."
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }

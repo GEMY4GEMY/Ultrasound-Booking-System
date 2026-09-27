@@ -83,7 +83,25 @@ jobs:
               if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }
             }
             $lists = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/lists"
-            Write-Host "Runtime smoke test passed. Server, homepage, JS handlers and V2 API are reachable."
+            $doctors = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/doctors"
+            if (-not $doctors -or $doctors.Count -lt 1) { throw "No doctor is available for booking smoke test" }
+            $doctor = [string]$doctors[0]
+            $testDate = (Get-Date).Date.AddDays(365).ToString("yyyy-MM-dd")
+            $listBody = @{ date=$testDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
+            $list = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $listBody
+            if (-not $list.id) { throw "Daily list creation failed" }
+            $phone = "01000000000"
+            $bookingBody = @{ listId=$list.id; patientName="CI Patient"; phone=$phone; contractType="نقدي"; insurer=""; exam="CI Exam"; notes="Automated smoke test"; actor="CI Smoke Test" } | ConvertTo-Json
+            $booking = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $bookingBody
+            if (-not $booking.patientId) { throw "Booking did not receive a patient ID" }
+            $patient = Invoke-RestMethod ("http://127.0.0.1:5090/api/v2/patients/by-phone?phone=" + $phone)
+            if ($patient.patientId -ne $booking.patientId) { throw "Patient phone lookup did not return the booking patient ID" }
+            $badBody = @{ listId=$list.id; patientName="CI Insured"; phone="01000000001"; contractType="تأمين"; insurer=""; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json
+            $rejected = $false
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $badBody | Out-Null }
+            catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $rejected = $true } else { throw } }
+            if (-not $rejected) { throw "Insured booking without insurer was accepted" }
+            Write-Host "Runtime workflow smoke test passed: list, cash booking, patient lookup and insurer validation."
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }

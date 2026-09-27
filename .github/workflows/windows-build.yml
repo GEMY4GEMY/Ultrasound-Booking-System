@@ -87,16 +87,17 @@ jobs:
             if (-not $doctors -or $doctors.Count -lt 1) { throw "No doctor is available for booking smoke test" }
             $doctor = [string]$doctors[0]
             $testDate = (Get-Date).Date.AddDays(365).ToString("yyyy-MM-dd")
-            $listBody = @{ date=$testDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
+            $listBody = @{ date=$testDate; doctor=$doctor; shift="\u0635\u0628\u0627\u062d\u064a"; actor="CI Smoke Test" } | ConvertTo-Json
+            $listBody = $listBody.Replace("\\u0635\\u0628\\u0627\\u062d\\u064a","\u0635\u0628\u0627\u062d\u064a")
             $list = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $listBody
             if (-not $list.id) { throw "Daily list creation failed" }
             $phone = "01000000000"
-            $bookingBody = @{ listId=$list.id; patientName="CI Patient"; phone=$phone; contractType="نقدي"; insurer=""; exam="CI Exam"; notes="Automated smoke test"; actor="CI Smoke Test" } | ConvertTo-Json
+            $bookingBody = "{\"listId\":\"$($list.id)\",\"patientName\":\"CI Patient\",\"phone\":\"$phone\",\"contractType\":\"\u0646\u0642\u062f\u064a\",\"insurer\":\"\",\"exam\":\"CI Exam\",\"notes\":\"Automated smoke test\",\"actor\":\"CI Smoke Test\"}"
             $booking = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $bookingBody
             if (-not $booking.patientId) { throw "Booking did not receive a patient ID" }
             $patient = Invoke-RestMethod ("http://127.0.0.1:5090/api/v2/patients/by-phone?phone=" + $phone)
             if ($patient.patientId -ne $booking.patientId) { throw "Patient phone lookup did not return the booking patient ID" }
-            $badBody = @{ listId=$list.id; patientName="CI Insured"; phone="01000000001"; contractType="تأمين"; insurer=""; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json
+            $badBody = "{\"listId\":\"$($list.id)\",\"patientName\":\"CI Insured\",\"phone\":\"01000000001\",\"contractType\":\"\u062a\u0623\u0645\u064a\u0646\",\"insurer\":\"\",\"exam\":\"CI Exam\",\"actor\":\"CI Smoke Test\"}"
             $rejected = $false
             try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $badBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $rejected = $true } else { throw } }

@@ -48,5 +48,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --cleanup-tag --yes 2>$null
-          gh release create latest "Ultrasound-Booking-System-Windows-x64.zip" --target "${{ github.sha }}" --title "Ultrasound Booking System - Latest Windows x64" --notes "Portable Windows x64 build. Extract the ZIP and run Start-Ultrasound-Server.cmd."
+          gh release view latest *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload latest "Ultrasound-Booking-System-Windows-x64.zip" --clobber
+          } else {
+            gh release create latest "Ultrasound-Booking-System-Windows-x64.zip" --target "${{ github.sha }}" --title "Ultrasound Booking System - Latest Windows x64" --notes "Portable Windows x64 build. Extract the ZIP and run Start-Ultrasound-Server.cmd."
+          }

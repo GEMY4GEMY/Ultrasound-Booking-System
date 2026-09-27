@@ -113,7 +113,12 @@ jobs:
             try { Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $statusBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $completedRejected = $true } else { throw } }
             if (-not $completedRejected) { throw "Completed daily list allowed booking status mutation" }
-            Write-Host "Runtime workflow smoke test passed: booking flow, insurer/doctor validation and completed-list lock."
+            $lockedBookingBody = @{ listId=$list.id; patientName="CI Locked"; phone="01000000002"; contractType="نقدي"; insurer=""; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json
+            $lockedBookingRejected = $false
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $lockedBookingBody | Out-Null }
+            catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $lockedBookingRejected = $true } else { throw } }
+            if (-not $lockedBookingRejected) { throw "Completed daily list accepted a new booking" }
+            Write-Host "Runtime workflow smoke test passed: booking flow, insurer/doctor validation, completed-list mutation lock and new-booking lock."
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }

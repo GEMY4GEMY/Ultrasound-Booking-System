@@ -1,7 +1,7 @@
 let lists=[],bookings=[],doctors=[],insurers=[],alerts=[],settings={duplicateNameDays:30},currentDay='',actor=localStorage.getItem('us_actor')||'';
 const el=id=>document.getElementById(id),safe=v=>String(v||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const iso=d=>new Date(d).toISOString().slice(0,10);
-const actorDlg=el('actorDlg'),editListDlg=el('editListDlg'),listDlg=el('listDlg'),chooseListDlg=el('chooseListDlg'),bookDlg=el('bookDlg'),bookingActionsDlg=el('bookingActionsDlg'),moveDlg=el('moveDlg'),patientHistoryDlg=el('patientHistoryDlg'),adminDlg=el('adminDlg'),restoreDlg=el('restoreDlg'),pinDlg=el('pinDlg'),deleteDlg=el('deleteDlg'),aboutDlg=el('aboutDlg');
+const actorDlg=el('actorDlg'),editListDlg=el('editListDlg'),listDlg=el('listDlg'),chooseListDlg=el('chooseListDlg'),bookDlg=el('bookDlg'),bookingActionsDlg=el('bookingActionsDlg'),moveDlg=el('moveDlg'),patientHistoryDlg=el('patientHistoryDlg'),adminDlg=el('adminDlg'),restoreDlg=el('restoreDlg'),pinDlg=el('pinDlg'),deleteBookingDlg=el('deleteBookingDlg'),aboutDlg=el('aboutDlg');
 async function getData(){[lists,bookings,doctors,insurers,alerts,settings]=await Promise.all(['/api/v2/lists','/api/v2/bookings','/api/v2/doctors','/api/v2/insurers','/api/v2/alerts','/api/v2/settings'].map(x=>fetch(x).then(r=>r.json())))}
 async function boot(){if(!actor)changeActor();el('actor').textContent=actor;await getData();currentDay=lists.map(x=>iso(x.date)).sort().pop()||iso(new Date());el('day').value=currentDay;refreshExamSuggestions();render()}
 function changeActor(){el('actorInput').value=actor||'';el('actorCancel').style.display=actor?'':'none';actorDlg.showModal();setTimeout(()=>el('actorInput').focus(),0)}

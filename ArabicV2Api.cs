@@ -31,6 +31,9 @@ public static class ArabicV2Api
             if(x==null||cfg.pinHash!=HashPin(x.pin))return Results.Unauthorized();
             var token=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));lock(adminTokens)adminTokens[token]=DateTime.Now.AddHours(8);Audit(auditFile,x.actor,"دخول لوحة الأدمن","تم فتح لوحة الأدمن",r);return Results.Ok(new{ok=true,token});
         });
+        app.MapPost("/api/v2/admin/logout",(HttpRequest r)=>{
+            var t=r.Headers["X-Admin-Token"].ToString();if(!string.IsNullOrWhiteSpace(t))lock(adminTokens)adminTokens.Remove(t);return Results.Ok(new{ok=true});
+        });
         app.MapPost("/api/v2/admin/change-pin",async(HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();var x=await JsonSerializer.DeserializeAsync<V2AdminPinChange>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
             if(x==null||cfg.pinHash!=HashPin(x.oldPin)||string.IsNullOrWhiteSpace(x.newPin)||x.newPin.Length<4)return Results.BadRequest();

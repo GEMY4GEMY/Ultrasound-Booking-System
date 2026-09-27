@@ -45,6 +45,33 @@ jobs:
           Copy-Item "Start-Ultrasound-Server.cmd" "publish\Start-Ultrasound-Server.cmd"
           Copy-Item "Setup-Network-Firewall.cmd" "publish\Setup-Network-Firewall.cmd"
           Copy-Item "NETWORK-SETUP.txt" "publish\NETWORK-SETUP.txt"
+      - name: Runtime smoke test published server
+        shell: powershell
+        run: |
+          $exe = (Get-ChildItem "publish\*.exe" | Select-Object -First 1).FullName
+          $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 20; $i++) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 2
+                $ready = $true
+                break
+              } catch {}
+            }
+            if (-not $ready) { throw "Published server did not become healthy on port 5090" }
+            $page = (Invoke-WebRequest "http://127.0.0.1:5090/" -UseBasicParsing).Content
+            if ($page -notmatch 'arabic-v2\.js\?v=175') { throw "Published homepage does not reference the expected V2 JavaScript" }
+            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=175" -UseBasicParsing).Content
+            foreach ($fn in @('openListDialog','quick','openAdmin','openAbout','saveBooking')) {
+              if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }
+            }
+            $lists = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/lists"
+            Write-Host "Runtime smoke test passed. Server, homepage, JS handlers and V2 API are reachable."
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
       - name: Verify package contents
         shell: powershell
         run: |

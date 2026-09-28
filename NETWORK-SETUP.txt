@@ -8,6 +8,7 @@ MAHMOUD GAMAL
 MAIN / SERVER COMPUTER
 ----------------------
 1. Extract the Windows x64 build to a normal folder. Do not run it from inside the ZIP file.
+   This build is self-contained: installing .NET on the server or client computers is not required.
 2. Run Setup-Network-Firewall.cmd once. Approve the Windows Administrator prompt.
 3. Run Start-Ultrasound-Server.cmd.
 4. Keep the server computer powered on while the department is using the system.

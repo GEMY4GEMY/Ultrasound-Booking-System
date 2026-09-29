@@ -50,6 +50,11 @@ jobs:
             }
           }
           Write-Host ("Validated {0} inline UI handlers." -f $handlers.Count)
+          if ($html -notmatch 'id="insurer"') { throw "Booking contract/insurer selector is missing from HTML" }
+          if ($html -match 'id="contract"') { throw "Legacy booking contract selector unexpectedly returned" }
+          if ($js -match "el\('contract'\)") { throw "JavaScript still references removed contract selector and will break booking save" }
+          if ($js -notmatch "contractType:'تعاقد',insurer:el\('insurer'\)\.value") { throw "Booking payload is not wired to selected contract entity" }
+          Write-Host "Validated booking form fields against JavaScript save logic."
       - name: Publish Windows x64
         run: dotnet publish --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output publish
       - name: Add network deployment tools

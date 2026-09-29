@@ -50,3 +50,5 @@ If another computer cannot connect:
 3. Confirm the Windows network profile on the server is Private.
 4. Run Setup-Network-Firewall.cmd again as Administrator.
 5. On the client computer open http://SERVER-IP:5090/api/health first, then open http://SERVER-IP:5090.
+
+V180 FINAL REVIEW: launcher, list creation, date navigation, live sync and server version verification enabled.

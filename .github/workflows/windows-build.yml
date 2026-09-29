@@ -75,9 +75,9 @@ jobs:
             }
             if (-not $ready) { throw "Published server did not become healthy on port 5090" }
             $page = (Invoke-WebRequest "http://127.0.0.1:5090/" -UseBasicParsing).Content
-            if ($page -notmatch 'arabic-v2\.js\?v=178') { throw "Published homepage does not reference the expected V2 JavaScript" }
+            if ($page -notmatch 'arabic-v2\.js\?v=179') { throw "Published homepage does not reference the expected V2 JavaScript" }
             if ($page -match '[A-Za-z0-9_]+Dlg\.close\(\)') { throw "Published homepage still depends on browser-global dialog variables" }
-            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=178" -UseBasicParsing).Content
+            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=179" -UseBasicParsing).Content
             if ($js -notmatch 'function\s+closeDialog\s*\(') { throw "Explicit dialog close handler is missing" }
             foreach ($fn in @('openListDialog','quick','openAdmin','openAbout','saveBooking')) {
               if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }

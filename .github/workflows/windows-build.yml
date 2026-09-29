@@ -123,6 +123,17 @@ jobs:
             $bookingBody = @{ listId=$list.id; patientName="CI Patient"; phone=$phone; contractType="تعاقد"; insurer="تعاقد"; exam="CI Exam"; notes="Automated smoke test"; actor="CI Smoke Test" } | ConvertTo-Json
             $booking = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $bookingBody
             if (-not $booking.patientId) { throw "Booking did not receive a patient ID" }
+            $afterCreate = @(Invoke-RestMethod "http://127.0.0.1:5090/api/v2/bookings")
+            $visible = $afterCreate | Where-Object { $_.id -eq $booking.id -and $_.listId -eq $list.id }
+            if (-not $visible) { throw "Created booking is not visible inside its daily list" }
+            if ($visible.status -ne "محجوز") { throw "Created booking did not start with reserved status" }
+            $attendBody = @{ status="تم الحضور"; actor="CI Smoke Test" } | ConvertTo-Json
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $attendBody | Out-Null
+            $afterStatus = @(Invoke-RestMethod "http://127.0.0.1:5090/api/v2/bookings")
+            $statusVisible = $afterStatus | Where-Object { $_.id -eq $booking.id -and $_.status -eq "تم الحضور" }
+            if (-not $statusVisible) { throw "Booking status change was not visible after reload" }
+            $reserveBody = @{ status="محجوز"; actor="CI Smoke Test" } | ConvertTo-Json
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $reserveBody | Out-Null
             $patient = Invoke-RestMethod ("http://127.0.0.1:5090/api/v2/patients/by-phone?phone=" + $phone)
             if ($patient.patientId -ne $booking.patientId) { throw "Patient phone lookup did not return the booking patient ID" }
             $badBody = @{ listId=$list.id; patientName="CI Insured"; phone="01000000001"; contractType="تأمين"; insurer=""; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json

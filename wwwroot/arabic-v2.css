@@ -35,3 +35,5 @@ button{border-radius:11px;transition:.16s ease}button:hover{transform:translateY
 dialog{border:0!important;border-radius:20px!important;box-shadow:0 25px 80px #102f5540!important}dialog::backdrop{background:#102d4e80;backdrop-filter:blur(2px)}
 .toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#163b65;color:#fff;padding:13px 22px;border-radius:12px;box-shadow:0 12px 35px #0003;z-index:1000;font-weight:700}
 @media(max-width:700px){main{padding:14px}.notification-panel{position:fixed;top:70px;left:5vw;width:90vw}}
+
+.incomplete-summary{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#fff7e6;border:1px solid #f0ce86;border-radius:13px;padding:12px 15px;margin:8px 0 15px;color:#755000}.incomplete-summary span{font-weight:700}@media(max-width:700px){.incomplete-summary{align-items:flex-start;flex-direction:column}}

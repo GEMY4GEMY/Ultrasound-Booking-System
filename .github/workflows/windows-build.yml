@@ -61,6 +61,8 @@ jobs:
         shell: powershell
         run: |
           Copy-Item "Start-Ultrasound-Server.cmd" "publish\Start-Ultrasound-Server.cmd"
+          Copy-Item "Server-Watchdog.ps1" "publish\Server-Watchdog.ps1"
+          Copy-Item "Install-AutoStart.cmd" "publish\Install-AutoStart.cmd"
           Copy-Item "Setup-Network-Firewall.cmd" "publish\Setup-Network-Firewall.cmd"
           Copy-Item "NETWORK-SETUP.txt" "publish\NETWORK-SETUP.txt"
       - name: Runtime smoke test published server
@@ -197,6 +199,8 @@ jobs:
         run: |
           Get-ChildItem publish
           if (-not (Test-Path "publish\Start-Ultrasound-Server.cmd")) { throw "Server launcher missing" }
+          if (-not (Test-Path "publish\Server-Watchdog.ps1")) { throw "Server watchdog missing" }
+          if (-not (Test-Path "publish\Install-AutoStart.cmd")) { throw "Auto Start installer missing" }
           if (-not (Test-Path "publish\Setup-Network-Firewall.cmd")) { throw "Firewall helper missing" }
           if (-not (Test-Path "publish\NETWORK-SETUP.txt")) { throw "Network guide missing" }
           if (-not (Get-ChildItem "publish\*.exe")) { throw "Application EXE missing" }

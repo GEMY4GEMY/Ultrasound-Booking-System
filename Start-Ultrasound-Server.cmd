@@ -14,7 +14,7 @@ if not exist "%WATCHDOG%" (
   if /I not "%~1"=="/background" pause
   exit /b 1
 )
-powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%WATCHDOG%"
+start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%WATCHDOG%"
 if /I "%~1"=="/background" exit /b 0
 for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /R /C:"IPv4 Address" /C:"IPv4-adresse"') do if not defined LANIP set "LANIP=%%A"
 set "LANIP=%LANIP: =%"

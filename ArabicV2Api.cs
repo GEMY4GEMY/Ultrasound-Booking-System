@@ -103,7 +103,7 @@ public static class ArabicV2Api
             var x=await JsonSerializer.DeserializeAsync<V2DailyList>(r.Body);
             if(x==null||string.IsNullOrWhiteSpace(x.doctor)||x.date==default||!new[]{"صباحي","مسائي"}.Contains(x.shift))return Results.BadRequest(new{error="invalid_data"});x.doctor=x.doctor.Trim();if(!Read<string>(doctorsFile).Any(d=>d.Equals(x.doctor,StringComparison.OrdinalIgnoreCase)))return Results.BadRequest(new{error="invalid_doctor"});
             var a=Read<V2DailyList>(listsFile);
-            if(a.Any(z=>z.date.Date==x.date.Date&&z.doctor==x.doctor&&z.shift==x.shift))return Results.Conflict(new{error="list_exists"});
+            var existing=a.FirstOrDefault(z=>z.date.Date==x.date.Date&&z.doctor.Equals(x.doctor,StringComparison.OrdinalIgnoreCase)&&z.shift==x.shift);if(existing!=null)return Results.Conflict(new{error="list_exists",existingId=existing.id,date=existing.date.ToString("yyyy-MM-dd"),doctor=existing.doctor,shift=existing.shift});
             x.id=Guid.NewGuid().ToString("N")[..8].ToUpper(); x.state="مفتوحة"; x.createdAt=DateTime.Now; x.updatedAt=DateTime.Now;
             a.Add(x);Write(listsFile,a);Audit(auditFile,x.actor,"إنشاء قائمة",$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}",r);return Results.Ok(x);
             }finally{mutationGate.Release();}

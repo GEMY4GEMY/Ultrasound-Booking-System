@@ -75,9 +75,9 @@ jobs:
             }
             if (-not $ready) { throw "Published server did not become healthy on port 5090" }
             $page = (Invoke-WebRequest "http://127.0.0.1:5090/" -UseBasicParsing).Content
-            if ($page -notmatch 'arabic-v2\.js\?v=176') { throw "Published homepage does not reference the expected V2 JavaScript" }
+            if ($page -notmatch 'arabic-v2\.js\?v=178') { throw "Published homepage does not reference the expected V2 JavaScript" }
             if ($page -match '[A-Za-z0-9_]+Dlg\.close\(\)') { throw "Published homepage still depends on browser-global dialog variables" }
-            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=176" -UseBasicParsing).Content
+            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=178" -UseBasicParsing).Content
             if ($js -notmatch 'function\s+closeDialog\s*\(') { throw "Explicit dialog close handler is missing" }
             foreach ($fn in @('openListDialog','quick','openAdmin','openAbout','saveBooking')) {
               if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }
@@ -104,6 +104,14 @@ jobs:
             $listBody = @{ date=$testDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
             $list = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $listBody
             if (-not $list.id) { throw "Daily list creation failed" }
+            $pastDate = (Get-Date).Date.AddDays(-30).ToString("yyyy-MM-dd")
+            $futureDate = (Get-Date).Date.AddDays(395).ToString("yyyy-MM-dd")
+            $pastBody = @{ date=$pastDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
+            $futureBody = @{ date=$futureDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
+            $pastList = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $pastBody
+            $futureList = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $futureBody
+            if (-not $pastList.id -or -not $futureList.id) { throw "Past/future daily list creation failed" }
+            if ($pastList.id -eq $futureList.id -or $pastList.id -eq $list.id) { throw "Lists on different dates were incorrectly treated as duplicates" }
             $phone = "01000000000"
             $bookingBody = @{ listId=$list.id; patientName="CI Patient"; phone=$phone; contractType="تعاقد"; insurer="تعاقد"; exam="CI Exam"; notes="Automated smoke test"; actor="CI Smoke Test" } | ConvertTo-Json
             $booking = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $bookingBody

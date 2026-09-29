@@ -8,12 +8,9 @@ echo       ULTRASOUND BOOKING SYSTEM - SERVER
 echo ==================================================
 echo.
 
-set "EXE="
-for %%F in (*.exe) do (
-  if /I not "%%~nxF"=="Start-Ultrasound-Server.exe" if not defined EXE set "EXE=%%~fF"
-)
+set "EXE=%~dp0UltrasoundBookingSystem.exe"
 
-if not defined EXE (
+if not exist "%EXE%" (
   echo ERROR: Application EXE was not found in this folder.
   echo Keep this launcher in the same folder as the published application.
   pause

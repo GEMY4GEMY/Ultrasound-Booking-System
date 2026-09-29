@@ -105,7 +105,7 @@ jobs:
             $list = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $listBody
             if (-not $list.id) { throw "Daily list creation failed" }
             $phone = "01000000000"
-            $bookingBody = @{ listId=$list.id; patientName="CI Patient"; phone=$phone; contractType="نقدي"; insurer=""; exam="CI Exam"; notes="Automated smoke test"; actor="CI Smoke Test" } | ConvertTo-Json
+            $bookingBody = @{ listId=$list.id; patientName="CI Patient"; phone=$phone; contractType="تعاقد"; insurer="تعاقد"; exam="CI Exam"; notes="Automated smoke test"; actor="CI Smoke Test" } | ConvertTo-Json
             $booking = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $bookingBody
             if (-not $booking.patientId) { throw "Booking did not receive a patient ID" }
             $patient = Invoke-RestMethod ("http://127.0.0.1:5090/api/v2/patients/by-phone?phone=" + $phone)
@@ -127,7 +127,7 @@ jobs:
             try { Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5090/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $statusBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $completedRejected = $true } else { throw } }
             if (-not $completedRejected) { throw "Completed daily list allowed booking status mutation" }
-            $lockedBookingBody = @{ listId=$list.id; patientName="CI Locked"; phone="01000000002"; contractType="نقدي"; insurer=""; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json
+            $lockedBookingBody = @{ listId=$list.id; patientName="CI Locked"; phone="01000000002"; contractType="تعاقد"; insurer="تعاقد"; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json
             $lockedBookingRejected = $false
             try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5090/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $lockedBookingBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $lockedBookingRejected = $true } else { throw } }

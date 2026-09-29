@@ -37,3 +37,9 @@ dialog{border:0!important;border-radius:20px!important;box-shadow:0 25px 80px #1
 @media(max-width:700px){main{padding:14px}.notification-panel{position:fixed;top:70px;left:5vw;width:90vw}}
 
 .incomplete-summary{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#fff7e6;border:1px solid #f0ce86;border-radius:13px;padding:12px 15px;margin:8px 0 15px;color:#755000}.incomplete-summary span{font-weight:700}@media(max-width:700px){.incomplete-summary{align-items:flex-start;flex-direction:column}}
+
+.unfinished-alerts{display:grid;gap:10px;margin-top:12px}
+.unfinished-alert{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid #f0ce86;border-radius:13px;background:#fffaf0}
+.unfinished-alert b{display:block;color:#755000;font-size:15px}
+.unfinished-alert small{display:block;margin-top:5px;color:#7b8798}
+@media(max-width:700px){.unfinished-alert{align-items:stretch;flex-direction:column}.unfinished-alert button{width:100%}}

@@ -1,4 +1,4 @@
-name: Windows x64 Build V181
+name: Windows x64 Build V182
 permissions:
   contents: write
 on:
@@ -80,9 +80,9 @@ jobs:
             }
             if (-not $ready) { throw "Published server did not become healthy on port 5090" }
             $page = (Invoke-WebRequest "http://127.0.0.1:5090/" -UseBasicParsing).Content
-            if ($page -notmatch 'arabic-v2\.js\?v=181') { throw "Published homepage does not reference the expected V2 JavaScript" }
+            if ($page -notmatch 'arabic-v2\.js\?v=182') { throw "Published homepage does not reference the expected V2 JavaScript" }
             if ($page -match '[A-Za-z0-9_]+Dlg\.close\(\)') { throw "Published homepage still depends on browser-global dialog variables" }
-            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=181" -UseBasicParsing).Content
+            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=182" -UseBasicParsing).Content
             if ($js -notmatch 'function\s+closeDialog\s*\(') { throw "Explicit dialog close handler is missing" }
             foreach ($fn in @('openListDialog','quick','openAdmin','openAbout','saveBooking')) {
               if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }
@@ -102,7 +102,7 @@ jobs:
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 429) { $lockedAdmin = $true } else { throw } }
             if (-not $lockedAdmin) { throw "Admin brute-force lockout did not activate after five failed PIN attempts" }
             $version = Invoke-RestMethod "http://127.0.0.1:5090/api/version"
-            if ($version.version -ne "V181") { throw "Wrong server version is running: $($version.version)" }
+            if ($version.version -ne "V182") { throw "Wrong server version is running: $($version.version)" }
             $lists = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/lists"
             $doctors = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/doctors"
             if (-not $doctors -or $doctors.Count -lt 1) { throw "No doctor is available for booking smoke test" }

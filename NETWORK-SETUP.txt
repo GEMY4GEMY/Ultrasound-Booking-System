@@ -10,8 +10,10 @@ MAIN / SERVER COMPUTER
 1. Extract the Windows x64 build to a normal folder. Do not run it from inside the ZIP file.
    This build is self-contained: installing .NET on the server or client computers is not required.
 2. Run Setup-Network-Firewall.cmd once. Approve the Windows Administrator prompt.
-3. Run Start-Ultrasound-Server.cmd.
-4. Keep the server computer powered on while the department is using the system.
+3. Run Setup-Network-Firewall.cmd once as Administrator.
+4. Run Install-AutoStart.cmd once as Administrator. This installs automatic server startup with Windows.
+5. Run Start-Ultrasound-Server.cmd for the first manual test. It starts a hidden health watchdog and may then be closed.
+6. Keep the server computer powered on while the department is using the system.
 5. The launcher shows the local network address, normally similar to:
    http://192.168.1.20:5090
 
@@ -52,3 +54,14 @@ If another computer cannot connect:
 5. On the client computer open http://SERVER-IP:5090/api/health first, then open http://SERVER-IP:5090.
 
 V180 FINAL REVIEW: launcher, list creation, date navigation, live sync and server version verification enabled.
+
+
+SERVER STABILITY / AUTO RECONNECT
+---------------------------------
+- Server-Watchdog.ps1 checks the local /api/health endpoint continuously.
+- If the EXE closes, it is started again automatically.
+- If the EXE remains running but stops answering health checks, the watchdog restarts it automatically.
+- The browser checks server data every 2 seconds. If the connection drops, it keeps retrying and reconnects automatically when the server returns.
+- Watchdog events are written to logs\watchdog.log.
+- Server exceptions are written to logs\server-errors.log.
+- Install-AutoStart.cmd creates a Windows startup task so the watchdog/server returns after a PC reboot.

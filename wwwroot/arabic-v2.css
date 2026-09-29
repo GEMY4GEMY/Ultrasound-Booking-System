@@ -17,3 +17,21 @@ dialog.large-dialog>.admin{padding:24px}
 .muted{color:#697b91}
 #incompleteBody .table{max-height:65vh}
 @media(max-width:700px){dialog.large-dialog{width:98vw;max-height:96vh}header{position:static;flex-wrap:wrap;padding:12px}}
+
+/* V177 visual redesign */
+header{padding:14px 28px;border-bottom:1px solid rgba(255,255,255,.12)}
+header h1{font-size:25px;letter-spacing:.2px}header small{opacity:.75}
+main{padding:26px 34px}
+.bar{border:1px solid #e2eaf3;border-radius:18px;padding:16px 18px;background:rgba(255,255,255,.94)}
+button{border-radius:11px;transition:.16s ease}button:hover{transform:translateY(-1px)}
+.primary{background:linear-gradient(135deg,#0879d1,#0059a7)!important;box-shadow:0 5px 14px #0879d128}
+.notify-wrap{position:relative}.bell{position:relative;background:rgba(255,255,255,.13)!important;color:#fff!important;border-color:rgba(255,255,255,.2)!important;font-size:20px;width:48px;height:44px;padding:0!important}
+.badge{position:absolute;top:-7px;left:-7px;background:#e33434;color:#fff;border:2px solid #173b65;border-radius:999px;min-width:22px;height:22px;padding:1px 5px;font:700 11px Arial;display:grid;place-items:center}
+.notification-panel{position:absolute;top:54px;left:0;width:min(420px,90vw);max-height:470px;overflow:auto;background:#fff;color:#17283b;border:1px solid #dce6f0;border-radius:16px;box-shadow:0 20px 55px #0b254b35;z-index:100;padding:10px}
+.notify-title{display:flex;align-items:center;padding:5px 7px 10px;border-bottom:1px solid #edf1f5}.notify-title button{margin-right:auto;border:0;background:transparent;font-size:22px}
+.notify-item{display:flex;gap:8px;align-items:flex-start;padding:11px 5px;border-bottom:1px solid #edf1f5}.notify-item>div{cursor:pointer;flex:1}.notify-item small{display:block;color:#74869a;margin-top:5px}.notify-x{border:0!important;background:#f3f6f9!important;color:#6d7c8c!important;border-radius:50%;width:29px;height:29px;padding:0!important;font-size:18px}.notify-empty{text-align:center;padding:25px;color:#718196}
+.day-empty{background:#fff;border:1px dashed #b9cbe0;border-radius:20px;text-align:center;padding:54px 20px;box-shadow:0 8px 30px #163b6410}.empty-icon{font-size:40px}.day-empty h3{margin:10px 0 5px}.day-empty p{color:#718196}
+.list{border-radius:20px;border:1px solid #e0e9f2;overflow:hidden}.listhead{padding:18px}.table table{background:#fff}
+dialog{border:0!important;border-radius:20px!important;box-shadow:0 25px 80px #102f5540!important}dialog::backdrop{background:#102d4e80;backdrop-filter:blur(2px)}
+.toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:#163b65;color:#fff;padding:13px 22px;border-radius:12px;box-shadow:0 12px 35px #0003;z-index:1000;font-weight:700}
+@media(max-width:700px){main{padding:14px}.notification-panel{position:fixed;top:70px;left:5vw;width:90vw}}

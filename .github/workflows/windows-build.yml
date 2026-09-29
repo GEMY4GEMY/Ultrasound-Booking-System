@@ -195,6 +195,34 @@ jobs:
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }
+      - name: Test watchdog automatic server recovery
+        shell: pwsh
+        run: |
+          $watchdog = Join-Path (Resolve-Path "publish") "Server-Watchdog.ps1"
+          $wd = Start-Process powershell.exe -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-File",$watchdog) -PassThru -WindowStyle Hidden
+          try {
+            $first = $null
+            for ($i=0; $i -lt 20; $i++) {
+              Start-Sleep -Seconds 1
+              try { $first = Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 2; break } catch {}
+            }
+            if (-not $first -or -not $first.pid) { throw "Watchdog did not start a healthy server" }
+            $firstPid = [int]$first.pid
+            Stop-Process -Id $firstPid -Force
+            $second = $null
+            for ($i=0; $i -lt 25; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $h = Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 2
+                if ($h.pid -and [int]$h.pid -ne $firstPid) { $second=$h; break }
+              } catch {}
+            }
+            if (-not $second) { throw "Watchdog failed to recover server after forced process termination" }
+            Write-Host ("Watchdog recovery passed: PID {0} -> {1}" -f $firstPid,$second.pid)
+          } finally {
+            try { $h=Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 1; if($h.pid){Stop-Process -Id ([int]$h.pid) -Force} } catch {}
+            if($wd -and -not $wd.HasExited){Stop-Process -Id $wd.Id -Force}
+          }
       - name: Verify package contents
         shell: powershell
         run: |

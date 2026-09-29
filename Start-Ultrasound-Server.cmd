@@ -31,8 +31,12 @@ echo Keep this window open while other computers use the system.
 echo Daily staff use their operator name only. Admin settings use a separate PIN.
 echo.
 start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:5090'"
+:RUN_SERVER
+echo [%date% %time%] Starting server...
 "%EXE%"
-
+set "EXITCODE=%ERRORLEVEL%"
 echo.
-echo Server stopped.
-pause
+echo [%date% %time%] Server stopped unexpectedly. Exit code: %EXITCODE%
+echo Restarting automatically in 3 seconds...
+timeout /t 3 /nobreak >nul
+goto RUN_SERVER

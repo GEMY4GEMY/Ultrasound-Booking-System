@@ -1,0 +1,39 @@
+ULTRASOUND BOOKING SYSTEM - SAFE D DRIVE INSTALLATION
+
+Recommended permanent layout:
+D:\UltrasoundBookingSystem\
+  UltrasoundBookingSystem.exe
+  Start-Ultrasound-Server.cmd
+  Server-Watchdog.ps1
+  Install-AutoStart.cmd
+  Install-AutoStart.ps1
+  Setup-Network-Firewall.cmd
+  data-location.txt
+  logs\
+
+Operational data is stored separately at:
+D:\UltrasoundBookingSystemData\
+
+INSTALLATION
+1. Extract the complete archive to D:\UltrasoundBookingSystem. Do not run from inside the ZIP.
+2. Do not move individual files out of this folder.
+3. Run Setup-Network-Firewall.cmd once as Administrator.
+4. Run Install-AutoStart.cmd once as Administrator.
+5. Run Start-Ultrasound-Server.cmd for the first test.
+6. Open http://localhost:5090/api/health and confirm status is ok.
+7. Client computers use http://SERVER-IP:5090.
+
+AUTO START / RECOVERY
+- Windows starts the watchdog automatically through a SYSTEM scheduled task.
+- The scheduled task points to Server-Watchdog.ps1 on D:.
+- If the server EXE stops, the watchdog starts it again.
+- If the EXE is alive but /api/health stops responding, the watchdog retries and then restarts the server.
+- Browsers retry every 2 seconds and reconnect automatically after the server returns.
+- Watchdog log: D:\UltrasoundBookingSystem\logs\watchdog.log
+- Server error log: D:\UltrasoundBookingSystem\logs\server-errors.log
+
+DATA SAFETY
+- Do not delete or format D:\UltrasoundBookingSystemData.
+- Replacing/updating D:\UltrasoundBookingSystem does not replace the data folder.
+- Backups are stored under the selected D: data folder.
+- Before reinstalling Windows, verify D: is not selected for formatting.

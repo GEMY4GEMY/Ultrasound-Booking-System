@@ -111,7 +111,7 @@ public static class ArabicV2Api
         app.MapPut("/api/v2/lists/{id}/state",async(string id,HttpRequest r)=>{
             await mutationGate.WaitAsync();try{
             var sc=await JsonSerializer.DeserializeAsync<V2StateChange>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
-            if(sc==null||x==null)return Results.NotFound();if(sc.state=="مقفلة")sc.state="مكتملة";if(!new[]{"مفتوحة","مكتملة"}.Contains(sc.state))return Results.BadRequest(new{error="invalid_state"});
+            if(sc==null||x==null)return Results.NotFound();if(x.state=="ملغاة")return Results.Conflict(new{error="list_cancelled"});if(sc.state=="مقفلة")sc.state="مكتملة";if(!new[]{"مفتوحة","مكتملة"}.Contains(sc.state))return Results.BadRequest(new{error="invalid_state"});
             var old=x.state;x.state=sc.state;x.updatedAt=DateTime.Now;x.modifiedBy=sc.actor;Write(listsFile,a);
             Audit(auditFile,sc.actor,"تغيير حالة القائمة",$"{x.doctor} - {x.shift}: {old} ← {x.state}",r);return Results.Ok(x);
             }finally{mutationGate.Release();}
@@ -129,7 +129,7 @@ public static class ArabicV2Api
         app.MapPut("/api/v2/lists/{id}",async(string id,HttpRequest r)=>{
             await mutationGate.WaitAsync();try{
             var n=await JsonSerializer.DeserializeAsync<V2ListEdit>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
-            if(n==null||x==null)return Results.NotFound();if(string.IsNullOrWhiteSpace(n.doctor)||n.date==default||!new[]{"صباحي","مسائي"}.Contains(n.shift))return Results.BadRequest(new{error="invalid_data"});n.doctor=n.doctor.Trim();if(!Read<string>(doctorsFile).Any(v=>v.Equals(n.doctor,StringComparison.OrdinalIgnoreCase)))return Results.BadRequest(new{error="invalid_doctor"});
+            if(n==null||x==null)return Results.NotFound();if(x.state=="ملغاة")return Results.Conflict(new{error="list_cancelled"});if(string.IsNullOrWhiteSpace(n.doctor)||n.date==default||!new[]{"صباحي","مسائي"}.Contains(n.shift))return Results.BadRequest(new{error="invalid_data"});n.doctor=n.doctor.Trim();if(!Read<string>(doctorsFile).Any(v=>v.Equals(n.doctor,StringComparison.OrdinalIgnoreCase)))return Results.BadRequest(new{error="invalid_doctor"});
             if(a.Any(z=>z.id!=id&&z.date.Date==n.date.Date&&z.doctor==n.doctor&&z.shift==n.shift))return Results.Conflict(new{error="list_exists"});
             var old=$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}";x.date=n.date.Date;x.doctor=n.doctor.Trim();x.shift=n.shift;x.updatedAt=DateTime.Now;x.modifiedBy=n.actor;Write(listsFile,a);
             var bs=Read<V2Booking>(bookingsFile);foreach(var b in bs.Where(z=>z.listId==id)){b.date=x.date;b.doctor=x.doctor;b.shift=x.shift;b.updatedAt=DateTime.Now;}Write(bookingsFile,bs);

@@ -257,9 +257,10 @@ public static class ArabicV2Api
                 if(s.requireMorning&&!morning)alerts.Add(new V2Alert{type="missing_morning",date=d,severity=d==today?"danger":"warning",message=d==today?"لم يتم إنشاء القائمة الصباحية لليوم":$"لم يتم إنشاء القائمة الصباحية بتاريخ {d:dd/MM/yyyy}"});
                 if(s.requireEvening&&!evening)alerts.Add(new V2Alert{type="missing_evening",date=d,severity=d==today?"danger":"warning",message=d==today?"لم يتم إنشاء القائمة المسائية لليوم":$"لم يتم إنشاء القائمة المسائية بتاريخ {d:dd/MM/yyyy}"});
             }
-            // Existing lists stay in the unfinished alert until they are explicitly completed.
-            var unfinished=lists.Where(x=>x.date.Date<=today&&x.date.Date>=configuredStart&&x.state!="مكتملة"&&x.state!="ملغاة");
-            foreach(var l in unfinished)alerts.Add(new V2Alert{type="unfinished_list",date=l.date.Date,severity="danger",message=$"قائمة يوم {l.date:dd/MM/yyyy} — {l.shift} — {l.doctor} لم يتم إغلاقها واستكمالها"});
+            // Open-list warnings are operational for TODAY only. Once the calendar day ends,
+            // yesterday's open lists no longer generate an alert; they remain available in history/audit.
+            var unfinished=lists.Where(x=>x.date.Date==today&&x.date.Date>=configuredStart&&x.state=="مفتوحة");
+            foreach(var l in unfinished)alerts.Add(new V2Alert{type="unfinished_list",date=l.date.Date,severity="danger",message=$"قائمة اليوم — {l.shift} — {l.doctor} ما زالت مفتوحة للحجز"});
             return Results.Json(alerts.OrderBy(x=>x.date).ThenBy(x=>x.type));
         });
     }

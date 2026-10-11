@@ -221,17 +221,21 @@ public static class ArabicV2Api
             addresses=Dns.GetHostAddresses(Dns.GetHostName()).Where(x=>x.AddressFamily==AddressFamily.InterNetwork&&!IPAddress.IsLoopback(x)).Select(x=>"http://"+x+":5090").Distinct().ToArray()
         });});
         app.MapGet("/api/v2/alerts",()=>{
-            var lists=Read<V2DailyList>(listsFile);var s=ReadOne<V2Settings>(settingsFile);var today=DateTime.Today;var alerts=new List<V2Alert>();
-            var start=s.alertsStartDate==default?(lists.Count>0?lists.Min(x=>x.date.Date):today):s.alertsStartDate.Date;if(start>today)start=today;
-            for(var d=start;d<=today;d=d.AddDays(1)){
+            var lists=Read<V2DailyList>(listsFile);var s=ReadOne<V2Settings>(settingsFile);var today=DateTime.Today;var horizon=today.AddMonths(1);var alerts=new List<V2Alert>();
+            var configuredStart=s.alertsStartDate==default?today:s.alertsStartDate.Date;
+            var missingStart=configuredStart>today?configuredStart:today;
+            // Missing-list planning alerts look one full month ahead, including today.
+            for(var d=missingStart;d<=horizon;d=d.AddDays(1)){
                 if(!s.workingDays.Contains((int)d.DayOfWeek))continue;
-                var day=lists.Where(x=>x.date.Date==d).ToList();var morning=day.Any(x=>x.shift=="صباحي");var evening=day.Any(x=>x.shift=="مسائي");
-                if(day.Count==0)alerts.Add(new V2Alert{type=d==today?"today_no_lists":"old_no_lists",date=d,severity=d==today?"danger":"warning",message=d==today?"لم يتم إنشاء أي قائمة لليوم حتى الآن":$"لم يتم إنشاء قوائم يوم {d:dd/MM/yyyy}"});
-                if(s.requireMorning&&!morning&&day.Count>0)alerts.Add(new V2Alert{type="missing_morning",date=d,severity="warning",message=d==today?"لم يتم إنشاء القائمة الصباحية لليوم":$"لم يتم إنشاء القائمة الصباحية بتاريخ {d:dd/MM/yyyy}"});
-                if(s.requireEvening&&!evening&&day.Count>0)alerts.Add(new V2Alert{type="missing_evening",date=d,severity="warning",message=d==today?"لم يتم إنشاء القائمة المسائية لليوم":$"لم يتم إنشاء القائمة المسائية بتاريخ {d:dd/MM/yyyy}"});
-                if(d<today&&day.Any(x=>x.state!="مكتملة"))alerts.Add(new V2Alert{type="old_incomplete",date=d,severity="danger",message=$"قوائم سابقة غير مكتملة بتاريخ {d:dd/MM/yyyy}"});
+                var day=lists.Where(x=>x.date.Date==d&&x.state!="ملغاة").ToList();
+                var morning=day.Any(x=>x.shift=="صباحي");var evening=day.Any(x=>x.shift=="مسائي");
+                if(s.requireMorning&&!morning)alerts.Add(new V2Alert{type="missing_morning",date=d,severity=d==today?"danger":"warning",message=d==today?"لم يتم إنشاء القائمة الصباحية لليوم":$"لم يتم إنشاء القائمة الصباحية بتاريخ {d:dd/MM/yyyy}"});
+                if(s.requireEvening&&!evening)alerts.Add(new V2Alert{type="missing_evening",date=d,severity=d==today?"danger":"warning",message=d==today?"لم يتم إنشاء القائمة المسائية لليوم":$"لم يتم إنشاء القائمة المسائية بتاريخ {d:dd/MM/yyyy}"});
             }
-            return Results.Json(alerts.OrderByDescending(x=>x.date).ThenBy(x=>x.type));
+            // Existing lists stay in the unfinished alert until they are explicitly completed.
+            var unfinished=lists.Where(x=>x.date.Date<=today&&x.date.Date>=configuredStart&&x.state!="مكتملة"&&x.state!="ملغاة");
+            foreach(var l in unfinished)alerts.Add(new V2Alert{type="unfinished_list",date=l.date.Date,severity="danger",message=$"قائمة يوم {l.date:dd/MM/yyyy} — {l.shift} — {l.doctor} لم يتم إغلاقها واستكمالها"});
+            return Results.Json(alerts.OrderBy(x=>x.date).ThenBy(x=>x.type));
         });
     }
     static string NormalizeName(string? s){if(string.IsNullOrWhiteSpace(s))return "";var t=s.Normalize(NormalizationForm.FormD);var sb=new StringBuilder();foreach(var ch in t){if(CharUnicodeInfo.GetUnicodeCategory(ch)!=UnicodeCategory.NonSpacingMark)sb.Append(ch);}return sb.ToString().Normalize(NormalizationForm.FormC).Replace("ـ","").Replace("أ","ا").Replace("إ","ا").Replace("آ","ا").Replace("ى","ي").Replace("ؤ","و").Replace("ئ","ي").Replace("ة","ه").ToLowerInvariant().Trim();}

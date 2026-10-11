@@ -1,4 +1,4 @@
-name: Windows x64 Build V186
+name: Windows x86+x64 Build V187
 permissions:
   contents: write
 on:
@@ -55,21 +55,25 @@ jobs:
           if ($js -match "el\('contract'\)") { throw "JavaScript still references removed contract selector and will break booking save" }
           if ($js -notmatch "contractType:'تعاقد',insurer:el\('insurer'\)\.value") { throw "Booking payload is not wired to selected contract entity" }
           Write-Host "Validated booking form fields against JavaScript save logic."
-      - name: Publish Windows x64
-        run: dotnet publish --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output publish
+      - name: Publish Windows 7/10/11 x64
+        run: dotnet publish --configuration Release --framework net6.0 --runtime win7-x64 --self-contained true -p:PublishSingleFile=true --output publish/x64
+      - name: Publish Windows 7/10/11 x86
+        run: dotnet publish --configuration Release --framework net6.0 --runtime win7-x86 --self-contained true -p:PublishSingleFile=true --output publish/x86
       - name: Add network deployment tools
         shell: powershell
         run: |
-          Copy-Item "Start-Ultrasound-Server.cmd" "publish\Start-Ultrasound-Server.cmd"
-          Copy-Item "Server-Watchdog.ps1" "publish\Server-Watchdog.ps1"
-          Copy-Item "Install-AutoStart.cmd" "publish\Install-AutoStart.cmd"
-          Copy-Item "Install-AutoStart.ps1" "publish\Install-AutoStart.ps1"
-          Copy-Item "Setup-Network-Firewall.cmd" "publish\Setup-Network-Firewall.cmd"
-          Copy-Item "NETWORK-SETUP.txt" "publish\NETWORK-SETUP.txt"
+          foreach ($arch in @("x64","x86")) {
+            Copy-Item "Start-Ultrasound-Server.cmd" "publish\$arch\Start-Ultrasound-Server.cmd"
+            Copy-Item "Server-Watchdog.ps1" "publish\$arch\Server-Watchdog.ps1"
+            Copy-Item "Install-AutoStart.cmd" "publish\$arch\Install-AutoStart.cmd"
+            Copy-Item "Install-AutoStart.ps1" "publish\$arch\Install-AutoStart.ps1"
+            Copy-Item "Setup-Network-Firewall.cmd" "publish\$arch\Setup-Network-Firewall.cmd"
+            Copy-Item "NETWORK-SETUP.txt" "publish\$arch\NETWORK-SETUP.txt"
+          }
       - name: Runtime smoke test published server
         shell: pwsh
         run: |
-          $exe = (Get-ChildItem "publish\*.exe" | Select-Object -First 1).FullName
+          $exe = (Get-ChildItem "publish\x64\*.exe" | Select-Object -First 1).FullName
           $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
           try {
             $ready = $false
@@ -83,9 +87,9 @@ jobs:
             }
             if (-not $ready) { throw "Published server did not become healthy on port 5090" }
             $page = (Invoke-WebRequest "http://127.0.0.1:5090/" -UseBasicParsing).Content
-            if ($page -notmatch 'arabic-v2\.js\?v=186') { throw "Published homepage does not reference the expected V2 JavaScript" }
+            if ($page -notmatch 'arabic-v2\.js\?v=187') { throw "Published homepage does not reference the expected V2 JavaScript" }
             if ($page -match '[A-Za-z0-9_]+Dlg\.close\(\)') { throw "Published homepage still depends on browser-global dialog variables" }
-            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=186" -UseBasicParsing).Content
+            $js = (Invoke-WebRequest "http://127.0.0.1:5090/arabic-v2.js?v=187" -UseBasicParsing).Content
             if ($js -notmatch 'function\s+closeDialog\s*\(') { throw "Explicit dialog close handler is missing" }
             foreach ($fn in @('openListDialog','quick','openAdmin','openAbout','saveBooking')) {
               if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }
@@ -105,7 +109,7 @@ jobs:
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 429) { $lockedAdmin = $true } else { throw } }
             if (-not $lockedAdmin) { throw "Admin brute-force lockout did not activate after five failed PIN attempts" }
             $version = Invoke-RestMethod "http://127.0.0.1:5090/api/version"
-            if ($version.version -ne "V186") { throw "Wrong server version is running: $($version.version)" }
+            if ($version.version -ne "V187") { throw "Wrong server version is running: $($version.version)" }
             $lists = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/lists"
             $doctors = Invoke-RestMethod "http://127.0.0.1:5090/api/v2/doctors"
             if (-not $doctors -or $doctors.Count -lt 1) { throw "No doctor is available for booking smoke test" }
@@ -198,7 +202,7 @@ jobs:
       - name: Test watchdog automatic server recovery
         shell: pwsh
         run: |
-          $watchdog = Join-Path (Resolve-Path "publish") "Server-Watchdog.ps1"
+          $watchdog = Join-Path (Resolve-Path "publish\x64") "Server-Watchdog.ps1"
           $wd = Start-Process powershell.exe -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-File",$watchdog) -PassThru -WindowStyle Hidden
           try {
             $first = $null
@@ -227,28 +231,27 @@ jobs:
         shell: powershell
         run: |
           Get-ChildItem publish
-          if (-not (Test-Path "publish\Start-Ultrasound-Server.cmd")) { throw "Server launcher missing" }
-          if (-not (Test-Path "publish\Server-Watchdog.ps1")) { throw "Server watchdog missing" }
-          if (-not (Test-Path "publish\Install-AutoStart.cmd")) { throw "Auto Start installer missing" }
-          if (-not (Test-Path "publish\Install-AutoStart.ps1")) { throw "Auto Start PowerShell installer missing" }
-          if (-not (Test-Path "publish\Setup-Network-Firewall.cmd")) { throw "Firewall helper missing" }
-          if (-not (Test-Path "publish\NETWORK-SETUP.txt")) { throw "Network guide missing" }
-          if (-not (Get-ChildItem "publish\*.exe")) { throw "Application EXE missing" }
+          foreach ($arch in @("x64","x86")) {
+            if (-not (Test-Path "publish\$arch\Start-Ultrasound-Server.cmd")) { throw "Server launcher missing for $arch" }
+            if (-not (Test-Path "publish\$arch\Server-Watchdog.ps1")) { throw "Server watchdog missing for $arch" }
+            if (-not (Test-Path "publish\$arch\Install-AutoStart.cmd")) { throw "Auto Start installer missing for $arch" }
+            if (-not (Get-ChildItem "publish\$arch\*.exe")) { throw "Application EXE missing for $arch" }
+          }
       - name: Upload test package
         uses: actions/upload-artifact@v4
         with:
-          name: Ultrasound-Booking-System-Windows-x64
+          name: Ultrasound-Booking-System-Windows-x86-x64
           path: publish
       - name: Create release ZIP
         shell: powershell
-        run: Compress-Archive -Path publish\\* -DestinationPath Ultrasound-Booking-System-Windows-x64.zip -Force
+        run: Compress-Archive -Path publish\\* -DestinationPath Ultrasound-Booking-System-Windows-x86-x64.zip -Force
       - name: Publish latest release
         if: github.ref == 'refs/heads/main'
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $asset = "Ultrasound-Booking-System-Windows-x64.zip"
+          $asset = "Ultrasound-Booking-System-Windows-x86-x64.zip"
           for ($attempt = 1; $attempt -le 3; $attempt++) {
             gh release upload latest $asset --clobber
             if ($LASTEXITCODE -eq 0) { exit 0 }

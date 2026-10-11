@@ -4,14 +4,18 @@ using System.Text.Json;
 var builder=WebApplication.CreateBuilder(args);builder.WebHost.UseUrls("http://0.0.0.0:5090");var app=builder.Build();
 var locationFile=Path.Combine(AppContext.BaseDirectory,"data-location.txt");
 string dir;
-if(File.Exists(locationFile)&&!string.IsNullOrWhiteSpace(File.ReadAllText(locationFile))) dir=Environment.ExpandEnvironmentVariables(File.ReadAllText(locationFile).Trim());
+var systemRoot=Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))??@"C:\";
+var fallbackDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"UltrasoundBookingSystem","data");
+var configuredDir=File.Exists(locationFile)?Environment.ExpandEnvironmentVariables(File.ReadAllText(locationFile).Trim()):"";
+var configuredRoot=string.IsNullOrWhiteSpace(configuredDir)?null:Path.GetPathRoot(configuredDir);
+var configuredDrive=string.IsNullOrWhiteSpace(configuredRoot)?null:DriveInfo.GetDrives().FirstOrDefault(d=>d.IsReady&&d.RootDirectory.FullName.Equals(configuredRoot,StringComparison.OrdinalIgnoreCase));
+if(!string.IsNullOrWhiteSpace(configuredDir)&&configuredDrive!=null) dir=configuredDir;
 else {
-    var systemRoot=Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))??@"C:\";
     var safeDrive=DriveInfo.GetDrives().FirstOrDefault(d=>d.IsReady&&d.DriveType==DriveType.Fixed&&!d.RootDirectory.FullName.Equals(systemRoot,StringComparison.OrdinalIgnoreCase));
-    dir=safeDrive!=null?Path.Combine(safeDrive.RootDirectory.FullName,"UltrasoundBookingSystemData"):Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"UltrasoundBookingSystem","data");
+    dir=safeDrive!=null?Path.Combine(safeDrive.RootDirectory.FullName,"UltrasoundBookingSystemData"):fallbackDir;
 }
 var legacyDataDir=Path.Combine(AppContext.BaseDirectory,"data");
-Directory.CreateDirectory(dir);
+try{Directory.CreateDirectory(dir);}catch{dir=fallbackDir;Directory.CreateDirectory(dir);}
 if(!Path.GetFullPath(dir).Equals(Path.GetFullPath(legacyDataDir),StringComparison.OrdinalIgnoreCase)&&Directory.Exists(legacyDataDir)&&!File.Exists(Path.Combine(dir,"daily-lists.json"))){
     foreach(var src in Directory.GetFiles(legacyDataDir,"*.json",SearchOption.TopDirectoryOnly)){var dst=Path.Combine(dir,Path.GetFileName(src));if(!File.Exists(dst))File.Copy(src,dst);}
 }

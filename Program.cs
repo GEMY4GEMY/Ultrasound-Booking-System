@@ -6,8 +6,9 @@ var locationFile=Path.Combine(AppContext.BaseDirectory,"data-location.txt");
 string dir;
 if(File.Exists(locationFile)&&!string.IsNullOrWhiteSpace(File.ReadAllText(locationFile))) dir=Environment.ExpandEnvironmentVariables(File.ReadAllText(locationFile).Trim());
 else {
-    var dRoot=@"D:\UltrasoundBookingSystemData";
-    dir=Directory.Exists(@"D:\")?dRoot:Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"UltrasoundBookingSystem","data");
+    var systemRoot=Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))??@"C:\";
+    var safeDrive=DriveInfo.GetDrives().FirstOrDefault(d=>d.IsReady&&d.DriveType==DriveType.Fixed&&!d.RootDirectory.FullName.Equals(systemRoot,StringComparison.OrdinalIgnoreCase));
+    dir=safeDrive!=null?Path.Combine(safeDrive.RootDirectory.FullName,"UltrasoundBookingSystemData"):Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"UltrasoundBookingSystem","data");
 }
 var legacyDataDir=Path.Combine(AppContext.BaseDirectory,"data");
 Directory.CreateDirectory(dir);

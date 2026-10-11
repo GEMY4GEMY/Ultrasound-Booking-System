@@ -29,6 +29,24 @@ public static class ArabicV2Api
         Init(settingsFile,JsonSerializer.Serialize(new V2Settings{workingDays=new[]{0,1,2,3,4,6},duplicateNameDays=30,requireMorning=true,requireEvening=true,alertsStartDate=DateTime.Today}));
         if(Read<V2Patient>(patientsFile).Count==0){var historic=Read<V2Booking>(bookingsFile).Where(x=>!x.isDeleted&&!string.IsNullOrWhiteSpace(x.patientId)).GroupBy(x=>x.patientId,StringComparer.OrdinalIgnoreCase).Select(g=>g.OrderByDescending(x=>x.createdAt).First()).Select(x=>new V2Patient{patientId=x.patientId,patientName=x.patientName,phone=x.phone,createdAt=x.createdAt,updatedAt=x.updatedAt}).ToList();if(historic.Count>0)Write(patientsFile,historic);}
 
+        string CreateV2Backup(string prefix="auto"){
+            var stamp=prefix+"_"+DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dataDir,"backups-v2",stamp);Directory.CreateDirectory(bd);
+            foreach(var file in new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,insurersFile,adminFile,settingsFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
+            return stamp;
+        }
+        _=Task.Run(async()=>{
+            while(true){
+                try{
+                    var now=DateTime.Now;var slot=now.Hour<12?"AM":"PM";var marker=Path.Combine(dataDir,$"auto-backup-{now:yyyyMMdd}-{slot}.done");
+                    if(!File.Exists(marker)){
+                        var stamp=CreateV2Backup("auto");File.WriteAllText(marker,DateTime.Now.ToString("O"));
+                        lock(DataLock){var audits=Read<V2Audit>(auditFile);audits.Add(new V2Audit{time=DateTime.Now,actor="SYSTEM",action="نسخة احتياطية تلقائية",detail=stamp,device=Environment.MachineName});AtomicWrite(auditFile,JsonSerializer.Serialize(audits,new JsonSerializerOptions{WriteIndented=true}));}
+                    }
+                }catch{}
+                await Task.Delay(TimeSpan.FromMinutes(5));
+            }
+        });
+
         app.MapPost("/api/v2/admin/login",async(HttpRequest r)=>{
             var key=r.HttpContext.Connection.RemoteIpAddress?.ToString()??"unknown";lock(adminLoginFailures){if(adminLoginFailures.TryGetValue(key,out var f)&&f.LockedUntil>DateTime.Now)return Results.Json(new{error="admin_login_locked",retryAfterSeconds=(int)Math.Ceiling((f.LockedUntil-DateTime.Now).TotalSeconds)},statusCode:429);}
             var x=await JsonSerializer.DeserializeAsync<V2AdminLogin>(r.Body);var cfg=ReadOne<V2AdminConfig>(adminFile);
@@ -51,9 +69,7 @@ public static class ArabicV2Api
         });
         app.MapPost("/api/v2/admin/backup",(string actor,HttpRequest r)=>{
             if(!IsAdmin(r))return Results.Unauthorized();
-            var stamp=DateTime.Now.ToString("yyyyMMdd_HHmmss");var bd=Path.Combine(dataDir,"backups-v2",stamp);Directory.CreateDirectory(bd);
-            foreach(var file in new[]{listsFile,bookingsFile,patientsFile,auditFile,doctorsFile,insurersFile,adminFile,settingsFile})if(File.Exists(file))File.Copy(file,Path.Combine(bd,Path.GetFileName(file)),true);
-            Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
+            var stamp=CreateV2Backup("manual");Audit(auditFile,actor,"نسخة احتياطية",stamp,r);return Results.Ok(new{folder=stamp});
         });
 
         app.MapGet("/api/v2/admin/backups",(HttpRequest r)=>{
@@ -101,7 +117,7 @@ public static class ArabicV2Api
         app.MapPost("/api/v2/lists",async(HttpRequest r)=>{
             await mutationGate.WaitAsync();try{
             var x=await JsonSerializer.DeserializeAsync<V2DailyList>(r.Body);
-            if(x==null||string.IsNullOrWhiteSpace(x.doctor)||x.date==default||!new[]{"صباحي","مسائي"}.Contains(x.shift))return Results.BadRequest(new{error="invalid_data"});x.doctor=x.doctor.Trim();if(!Read<string>(doctorsFile).Any(d=>d.Equals(x.doctor,StringComparison.OrdinalIgnoreCase)))return Results.BadRequest(new{error="invalid_doctor"});
+            if(x==null||string.IsNullOrWhiteSpace(x.doctor)||x.date==default||!new[]{"صباحي","مسائي"}.Contains(x.shift))return Results.BadRequest(new{error="invalid_data"});if(x.date.Date>DateTime.Today.AddMonths(1))return Results.BadRequest(new{error="future_limit",maxDate=DateTime.Today.AddMonths(1).ToString("yyyy-MM-dd")});x.doctor=x.doctor.Trim();if(!Read<string>(doctorsFile).Any(d=>d.Equals(x.doctor,StringComparison.OrdinalIgnoreCase)))return Results.BadRequest(new{error="invalid_doctor"});
             var a=Read<V2DailyList>(listsFile);
             var existing=a.FirstOrDefault(z=>z.date.Date==x.date.Date&&z.doctor.Equals(x.doctor,StringComparison.OrdinalIgnoreCase)&&z.shift==x.shift);if(existing!=null)return Results.Conflict(new{error="list_exists",existingId=existing.id,date=existing.date.ToString("yyyy-MM-dd"),doctor=existing.doctor,shift=existing.shift});
             x.id=Guid.NewGuid().ToString("N")[..8].ToUpper(); x.state="مفتوحة"; x.createdAt=DateTime.Now; x.updatedAt=DateTime.Now;
@@ -126,10 +142,19 @@ public static class ArabicV2Api
                 return Results.Ok(x);
             }finally{mutationGate.Release();}
         });
+        app.MapDelete("/api/v2/admin/lists/{id}",async(string id,string actor,HttpRequest r)=>{
+            if(!IsAdmin(r))return Results.Unauthorized();await mutationGate.WaitAsync();try{
+                var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);if(x==null)return Results.NotFound();
+                var bs=Read<V2Booking>(bookingsFile);var affected=0;foreach(var b in bs.Where(z=>z.listId==id&&!z.isDeleted)){b.isDeleted=true;b.deletedAt=DateTime.Now;b.deletedBy=actor;b.updatedAt=DateTime.Now;affected++;}
+                a.Remove(x);Write(listsFile,a);Write(bookingsFile,bs);
+                Audit(auditFile,actor,"حذف قائمة",$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift} - تم إخفاء {affected} حجز مع الاحتفاظ بها في السجل",r);
+                return Results.Ok(new{deleted=id,archivedBookings=affected});
+            }finally{mutationGate.Release();}
+        });
         app.MapPut("/api/v2/lists/{id}",async(string id,HttpRequest r)=>{
             await mutationGate.WaitAsync();try{
             var n=await JsonSerializer.DeserializeAsync<V2ListEdit>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
-            if(n==null||x==null)return Results.NotFound();if(x.state=="ملغاة")return Results.Conflict(new{error="list_cancelled"});if(string.IsNullOrWhiteSpace(n.doctor)||n.date==default||!new[]{"صباحي","مسائي"}.Contains(n.shift))return Results.BadRequest(new{error="invalid_data"});n.doctor=n.doctor.Trim();if(!Read<string>(doctorsFile).Any(v=>v.Equals(n.doctor,StringComparison.OrdinalIgnoreCase)))return Results.BadRequest(new{error="invalid_doctor"});
+            if(n==null||x==null)return Results.NotFound();if(x.state=="ملغاة")return Results.Conflict(new{error="list_cancelled"});if(string.IsNullOrWhiteSpace(n.doctor)||n.date==default||!new[]{"صباحي","مسائي"}.Contains(n.shift))return Results.BadRequest(new{error="invalid_data"});if(n.date.Date>DateTime.Today.AddMonths(1))return Results.BadRequest(new{error="future_limit",maxDate=DateTime.Today.AddMonths(1).ToString("yyyy-MM-dd")});n.doctor=n.doctor.Trim();if(!Read<string>(doctorsFile).Any(v=>v.Equals(n.doctor,StringComparison.OrdinalIgnoreCase)))return Results.BadRequest(new{error="invalid_doctor"});
             if(a.Any(z=>z.id!=id&&z.date.Date==n.date.Date&&z.doctor==n.doctor&&z.shift==n.shift))return Results.Conflict(new{error="list_exists"});
             var old=$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift}";x.date=n.date.Date;x.doctor=n.doctor.Trim();x.shift=n.shift;x.updatedAt=DateTime.Now;x.modifiedBy=n.actor;Write(listsFile,a);
             var bs=Read<V2Booking>(bookingsFile);foreach(var b in bs.Where(z=>z.listId==id)){b.date=x.date;b.doctor=x.doctor;b.shift=x.shift;b.updatedAt=DateTime.Now;}Write(bookingsFile,bs);

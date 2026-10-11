@@ -200,6 +200,56 @@ jobs:
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }
+      - name: Runtime smoke test Windows x86 server
+        shell: pwsh
+        run: |
+          $exe = (Get-ChildItem "publish\x86\*.exe" | Select-Object -First 1).FullName
+          $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 2
+                if ($health.status -eq "ok") { $ready = $true; break }
+              } catch {}
+              if ($proc.HasExited) { throw "Windows x86 server exited during startup with code $($proc.ExitCode)" }
+            }
+            if (-not $ready) { throw "Windows x86 server did not become healthy on port 5090" }
+            $version = Invoke-RestMethod "http://127.0.0.1:5090/api/version"
+            if ($version.version -ne "V187") { throw "Windows x86 server returned wrong version: $($version.version)" }
+            Write-Host "Windows x86 runtime server test passed."
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
+      - name: Test x86 watchdog automatic server recovery
+        shell: pwsh
+        run: |
+          $watchdog = Join-Path (Resolve-Path "publish\x86") "Server-Watchdog.ps1"
+          $wd = Start-Process powershell.exe -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-File",$watchdog) -PassThru -WindowStyle Hidden
+          try {
+            $first = $null
+            for ($i=0; $i -lt 25; $i++) {
+              Start-Sleep -Seconds 1
+              try { $first = Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 2; break } catch {}
+            }
+            if (-not $first -or -not $first.pid) { throw "x86 watchdog did not start a healthy server" }
+            $firstPid = [int]$first.pid
+            Stop-Process -Id $firstPid -Force
+            $second = $null
+            for ($i=0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $h = Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 2
+                if ($h.pid -and [int]$h.pid -ne $firstPid) { $second=$h; break }
+              } catch {}
+            }
+            if (-not $second) { throw "x86 watchdog failed to recover server after forced termination" }
+            Write-Host ("x86 watchdog recovery passed: PID {0} -> {1}" -f $firstPid,$second.pid)
+          } finally {
+            try { $h=Invoke-RestMethod "http://127.0.0.1:5090/api/health" -TimeoutSec 1; if($h.pid){Stop-Process -Id ([int]$h.pid) -Force} } catch {}
+            if($wd -and -not $wd.HasExited){Stop-Process -Id $wd.Id -Force}
+          }
       - name: Test watchdog automatic server recovery
         shell: pwsh
         run: |

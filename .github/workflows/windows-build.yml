@@ -69,6 +69,7 @@ jobs:
             Copy-Item "Install-AutoStart.ps1" "publish\$arch\Install-AutoStart.ps1"
             Copy-Item "Setup-Network-Firewall.cmd" "publish\$arch\Setup-Network-Firewall.cmd"
             Copy-Item "NETWORK-SETUP.txt" "publish\$arch\NETWORK-SETUP.txt"
+            Copy-Item "DATA-STORAGE.txt" "publish\$arch\DATA-STORAGE.txt"
           }
       - name: Runtime smoke test published server
         shell: pwsh
@@ -236,6 +237,7 @@ jobs:
             if (-not (Test-Path "publish\$arch\Server-Watchdog.ps1")) { throw "Server watchdog missing for $arch" }
             if (-not (Test-Path "publish\$arch\Install-AutoStart.cmd")) { throw "Auto Start installer missing for $arch" }
             if (-not (Get-ChildItem "publish\$arch\*.exe")) { throw "Application EXE missing for $arch" }
+            if (-not (Test-Path "publish\$arch\DATA-STORAGE.txt")) { throw "Data storage guide missing for $arch" }
           }
       - name: Upload test package
         uses: actions/upload-artifact@v4

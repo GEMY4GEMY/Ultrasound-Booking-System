@@ -2,7 +2,7 @@
 setlocal
 title Ultrasound Booking System - Network Setup
 
-echo This tool allows TCP port 5090 on Windows Private networks.
+echo This tool allows TCP port 5195 on Windows Private networks.
 echo Administrator permission is required.
 echo.
 
@@ -13,16 +13,16 @@ if not "%errorlevel%"=="0" (
   exit /b
 )
 
-netsh advfirewall firewall delete rule name="Ultrasound Booking System - TCP 5090" >nul 2>&1
-netsh advfirewall firewall add rule name="Ultrasound Booking System - TCP 5090" dir=in action=allow protocol=TCP localport=5090 profile=private enable=yes
+netsh advfirewall firewall delete rule name="Ultrasound Booking System - TCP 5195" >nul 2>&1
+netsh advfirewall firewall add rule name="Ultrasound Booking System - TCP 5195" dir=in action=allow protocol=TCP localport=5195 profile=private enable=yes
 
 if "%errorlevel%"=="0" (
   echo.
-  echo SUCCESS: Port 5090 is allowed on Private networks.
+  echo SUCCESS: Port 5195 is allowed on Private networks.
   echo The application can now be reached by other devices on the same LAN.
   echo.
   echo Verifying firewall rule...
-  netsh advfirewall firewall show rule name="Ultrasound Booking System - TCP 5090"
+  netsh advfirewall firewall show rule name="Ultrasound Booking System - TCP 5195"
 ) else (
   echo.
   echo ERROR: Windows Firewall rule could not be created.

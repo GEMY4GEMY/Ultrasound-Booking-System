@@ -1,0 +1,16 @@
+ULTRASOUND BOOKING SYSTEM - DATA STORAGE
+
+The application stores operational data outside the EXE folder.
+
+Automatic choice:
+1. If data-location.txt exists beside the EXE, its first line is used as the data folder.
+2. Otherwise the application prefers the first available fixed drive that is not the Windows system drive, for example D:\\UltrasoundBookingSystemData.
+3. If only the Windows drive exists, the shared ProgramData folder is used.
+
+For best protection when reinstalling Windows, create data-location.txt beside UltrasoundBookingSystem.exe and put one folder path on a separate drive, for example D:\\UltrasoundBookingSystemData or E:\\UltrasoundBookingSystemData.
+
+Existing V2 JSON data from the old local data folder is migrated automatically when the new storage is empty.
+
+A full daily snapshot of the JSON data is created automatically under the selected data folder in backups-daily. The server checks hourly so the daily backup is not missed when the PC starts later.
+
+Keep the selected data drive outside any Windows reinstall operation and periodically copy backups to another storage device.

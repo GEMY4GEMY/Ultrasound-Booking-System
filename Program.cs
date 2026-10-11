@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-var builder=WebApplication.CreateBuilder(args);builder.WebHost.UseUrls("http://0.0.0.0:5090");var app=builder.Build();
+var builder=WebApplication.CreateBuilder(args);builder.WebHost.UseUrls("http://0.0.0.0:5195");var app=builder.Build();
 // Portable-first storage: the entire data directory travels with the application.
 var appRoot=AppContext.BaseDirectory;
 var dir=Path.Combine(appRoot,"data");

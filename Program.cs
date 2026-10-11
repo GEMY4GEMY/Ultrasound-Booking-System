@@ -2,22 +2,45 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 var builder=WebApplication.CreateBuilder(args);builder.WebHost.UseUrls("http://0.0.0.0:5090");var app=builder.Build();
-var locationFile=Path.Combine(AppContext.BaseDirectory,"data-location.txt");
-string dir;
-var systemRoot=Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))??@"C:\";
-var fallbackDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"UltrasoundBookingSystem","data");
+// Portable-first storage: the entire data directory travels with the application.
+var appRoot=AppContext.BaseDirectory;
+var dir=Path.Combine(appRoot,"data");
+var locationFile=Path.Combine(appRoot,"data-location.txt");
 var configuredDir=File.Exists(locationFile)?Environment.ExpandEnvironmentVariables(File.ReadAllText(locationFile).Trim()):"";
-var configuredRoot=string.IsNullOrWhiteSpace(configuredDir)?null:Path.GetPathRoot(configuredDir);
-var configuredDrive=string.IsNullOrWhiteSpace(configuredRoot)?null:DriveInfo.GetDrives().FirstOrDefault(d=>d.IsReady&&d.RootDirectory.FullName.Equals(configuredRoot,StringComparison.OrdinalIgnoreCase));
-if(!string.IsNullOrWhiteSpace(configuredDir)&&configuredDrive!=null) dir=configuredDir;
-else {
-    var safeDrive=DriveInfo.GetDrives().FirstOrDefault(d=>d.IsReady&&d.DriveType==DriveType.Fixed&&!d.RootDirectory.FullName.Equals(systemRoot,StringComparison.OrdinalIgnoreCase));
-    dir=safeDrive!=null?Path.Combine(safeDrive.RootDirectory.FullName,"UltrasoundBookingSystemData"):fallbackDir;
+var systemRoot=Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows))??@"C:\\";
+var fallbackDir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"UltrasoundBookingSystem","data");
+var previousLocations=new List<string>();
+if(!string.IsNullOrWhiteSpace(configuredDir))previousLocations.Add(configuredDir);
+foreach(var drive in DriveInfo.GetDrives()){
+    try{
+        if(drive.IsReady&&drive.DriveType==DriveType.Fixed&&!drive.RootDirectory.FullName.Equals(systemRoot,StringComparison.OrdinalIgnoreCase))
+            previousLocations.Add(Path.Combine(drive.RootDirectory.FullName,"UltrasoundBookingSystemData"));
+    }catch{}
 }
-var legacyDataDir=Path.Combine(AppContext.BaseDirectory,"data");
-try{Directory.CreateDirectory(dir);}catch{dir=fallbackDir;Directory.CreateDirectory(dir);}
-if(!Path.GetFullPath(dir).Equals(Path.GetFullPath(legacyDataDir),StringComparison.OrdinalIgnoreCase)&&Directory.Exists(legacyDataDir)&&!File.Exists(Path.Combine(dir,"daily-lists.json"))){
-    foreach(var src in Directory.GetFiles(legacyDataDir,"*.json",SearchOption.TopDirectoryOnly)){var dst=Path.Combine(dir,Path.GetFileName(src));if(!File.Exists(dst))File.Copy(src,dst);}
+previousLocations.Add(fallbackDir);
+Directory.CreateDirectory(dir);
+var portableDataFiles=Directory.GetFiles(dir,"*.json",SearchOption.TopDirectoryOnly);
+if(portableDataFiles.Length==0){
+    foreach(var oldDir in previousLocations.Distinct(StringComparer.OrdinalIgnoreCase)){
+        try{
+            if(Path.GetFullPath(oldDir).Equals(Path.GetFullPath(dir),StringComparison.OrdinalIgnoreCase)||!Directory.Exists(oldDir))continue;
+            var oldFiles=Directory.GetFiles(oldDir,"*.json",SearchOption.TopDirectoryOnly);
+            if(oldFiles.Length==0)continue;
+            foreach(var src in oldFiles)File.Copy(src,Path.Combine(dir,Path.GetFileName(src)),false);
+            foreach(var backupName in new[]{"backups","backups-daily"}){
+                var oldBackup=Path.Combine(oldDir,backupName);
+                var newBackup=Path.Combine(dir,backupName);
+                if(Directory.Exists(oldBackup)&&!Directory.Exists(newBackup)){
+                    foreach(var source in Directory.GetFiles(oldBackup,"*",SearchOption.AllDirectories)){
+                        var dest=Path.Combine(newBackup,Path.GetRelativePath(oldBackup,source));
+                        Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                        File.Copy(source,dest,false);
+                    }
+                }
+            }
+            break;
+        }catch(Exception ex){Console.Error.WriteLine("Portable data migration failed: "+ex.Message);}
+    }
 }
 var logDir=Path.Combine(AppContext.BaseDirectory,"logs");Directory.CreateDirectory(logDir);
 var crashLog=Path.Combine(logDir,"server-errors.log");

@@ -116,6 +116,16 @@ public static class ArabicV2Api
             Audit(auditFile,sc.actor,"تغيير حالة القائمة",$"{x.doctor} - {x.shift}: {old} ← {x.state}",r);return Results.Ok(x);
             }finally{mutationGate.Release();}
         });
+        app.MapPost("/api/v2/admin/lists/{id}/cancel",async(string id,HttpRequest r)=>{
+            if(!IsAdmin(r))return Results.Unauthorized();await mutationGate.WaitAsync();try{
+                var req=await JsonSerializer.DeserializeAsync<V2DeleteBooking>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);
+                if(x==null)return Results.NotFound();if(req==null||string.IsNullOrWhiteSpace(req.reason))return Results.BadRequest(new{error="reason_required"});
+                if(x.state=="ملغاة")return Results.Conflict(new{error="list_cancelled"});
+                var old=x.state;x.state="ملغاة";x.updatedAt=DateTime.Now;x.modifiedBy=req.actor;Write(listsFile,a);
+                Audit(auditFile,req.actor,"إلغاء قائمة",$"{x.date:yyyy-MM-dd} - {x.doctor} - {x.shift} - من {old} - السبب: {req.reason}",r);
+                return Results.Ok(x);
+            }finally{mutationGate.Release();}
+        });
         app.MapPut("/api/v2/lists/{id}",async(string id,HttpRequest r)=>{
             await mutationGate.WaitAsync();try{
             var n=await JsonSerializer.DeserializeAsync<V2ListEdit>(r.Body);var a=Read<V2DailyList>(listsFile);var x=a.FirstOrDefault(z=>z.id==id);

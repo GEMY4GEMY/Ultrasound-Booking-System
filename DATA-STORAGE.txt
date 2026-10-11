@@ -1,16 +1,14 @@
-ULTRASOUND BOOKING SYSTEM - DATA STORAGE
+ULTRASOUND BOOKING SYSTEM - PORTABLE DATA STORAGE
 
-The application stores operational data outside the EXE folder.
+The server now keeps its operational data beside the executable:
+  <application folder>\data\
 
-Automatic choice:
-1. If data-location.txt exists beside the EXE, its first line is used as the data folder.
-2. Otherwise the application prefers the first available fixed drive that is not the Windows system drive, for example D:\\UltrasoundBookingSystemData.
-3. If only the Windows drive exists, the shared ProgramData folder is used.
+You may place the complete application folder on C:, D:, E:, USB storage, or another writable location. No particular drive letter is required. Do not run the application from a read-only folder or a protected location such as Program Files.
 
-For best protection when reinstalling Windows, create data-location.txt beside UltrasoundBookingSystem.exe and put one folder path on a separate drive, for example D:\\UltrasoundBookingSystemData or E:\\UltrasoundBookingSystemData.
+On first start, when the local data folder contains no JSON files, the server attempts to copy existing JSON files and backups from the previously configured data-location.txt folder, an old UltrasoundBookingSystemData folder on another fixed drive, or the old ProgramData location. The old files are left intact. Check that the bookings and patients are present before removing any previous installation.
 
-Existing V2 JSON data from the old local data folder is migrated automatically when the new storage is empty.
+ALWAYS move/copy the entire application folder, including data and its backups, before reinstalling or formatting Windows. Data on a formatted drive cannot be recovered merely by reinstalling the EXE.
 
-A full daily snapshot of the JSON data is created automatically under the selected data folder in backups-daily. The server checks hourly so the daily backup is not missed when the PC starts later.
+Automatic backups are stored under data\backups-daily. Also maintain an independent backup on another disk or network share: an in-folder backup cannot protect against disk failure, deletion, or formatting.
 
-Keep the selected data drive outside any Windows reinstall operation and periodically copy backups to another storage device.
+For troubleshooting, inspect logs\server-errors.log and logs\watchdog.log. The server listens on port 5090.

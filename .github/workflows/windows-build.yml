@@ -1,4 +1,4 @@
-name: Windows x86+x64 Build V187
+name: Windows x86+x64 Build V188
 permissions:
   contents: write
 on:
@@ -81,119 +81,119 @@ jobs:
             for ($i = 0; $i -lt 20; $i++) {
               Start-Sleep -Milliseconds 500
               try {
-                $health = Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 2
+                $health = Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 2
                 $ready = $true
                 break
               } catch {}
             }
-            if (-not $ready) { throw "Published server did not become healthy on port 5195" }
-            $page = (Invoke-WebRequest "http://127.0.0.1:5195/" -UseBasicParsing).Content
+            if (-not $ready) { throw "Published server did not become healthy on port 5050" }
+            $page = (Invoke-WebRequest "http://127.0.0.1:5050/" -UseBasicParsing).Content
             if ($page -notmatch 'arabic-v2\.js\?v=187') { throw "Published homepage does not reference the expected V2 JavaScript" }
             if ($page -match '[A-Za-z0-9_]+Dlg\.close\(\)') { throw "Published homepage still depends on browser-global dialog variables" }
-            $js = (Invoke-WebRequest "http://127.0.0.1:5195/arabic-v2.js?v=187" -UseBasicParsing).Content
+            $js = (Invoke-WebRequest "http://127.0.0.1:5050/arabic-v2.js?v=187" -UseBasicParsing).Content
             if ($js -notmatch 'function\s+closeDialog\s*\(') { throw "Explicit dialog close handler is missing" }
             foreach ($fn in @('openListDialog','quick','openAdmin','openAbout','saveBooking')) {
               if ($js -notmatch ("function\s+" + $fn + "\s*\(")) { throw "Missing frontend handler: $fn" }
             }
             $adminOkBody = @{ pin="1234"; actor="CI Admin Test" } | ConvertTo-Json
-            $adminOk = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $adminOkBody
+            $adminOk = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $adminOkBody
             if (-not $adminOk.token) { throw "Default admin PIN did not return an admin token" }
             $badAdminBody = @{ pin="9999"; actor="CI Admin Test" } | ConvertTo-Json
             for ($attempt = 1; $attempt -le 5; $attempt++) {
               $badRejected = $false
-              try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $badAdminBody | Out-Null }
+              try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $badAdminBody | Out-Null }
               catch { if ($_.Exception.Response.StatusCode.value__ -eq 401) { $badRejected = $true } else { throw } }
               if (-not $badRejected) { throw "Invalid admin PIN attempt $attempt was not rejected with 401" }
             }
             $lockedAdmin = $false
-            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $adminOkBody | Out-Null }
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/admin/login" -ContentType "application/json; charset=utf-8" -Body $adminOkBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 429) { $lockedAdmin = $true } else { throw } }
             if (-not $lockedAdmin) { throw "Admin brute-force lockout did not activate after five failed PIN attempts" }
-            $version = Invoke-RestMethod "http://127.0.0.1:5195/api/version"
-            if ($version.version -ne "V187") { throw "Wrong server version is running: $($version.version)" }
-            $lists = Invoke-RestMethod "http://127.0.0.1:5195/api/v2/lists"
-            $doctors = Invoke-RestMethod "http://127.0.0.1:5195/api/v2/doctors"
+            $version = Invoke-RestMethod "http://127.0.0.1:5050/api/version"
+            if ($version.version -ne "V188") { throw "Wrong server version is running: $($version.version)" }
+            $lists = Invoke-RestMethod "http://127.0.0.1:5050/api/v2/lists"
+            $doctors = Invoke-RestMethod "http://127.0.0.1:5050/api/v2/doctors"
             if (-not $doctors -or $doctors.Count -lt 1) { throw "No doctor is available for booking smoke test" }
             $doctor = [string]$doctors[0]
             $testDate = (Get-Date).Date.AddDays(365).ToString("yyyy-MM-dd")
             $listBody = @{ date=$testDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
-            $list = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $listBody
+            $list = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $listBody
             if (-not $list.id) { throw "Daily list creation failed" }
             $pastDate = (Get-Date).Date.AddDays(-30).ToString("yyyy-MM-dd")
             $futureDate = (Get-Date).Date.AddDays(395).ToString("yyyy-MM-dd")
             $pastBody = @{ date=$pastDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
             $futureBody = @{ date=$futureDate; doctor=$doctor; shift="صباحي"; actor="CI Smoke Test" } | ConvertTo-Json
-            $pastList = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $pastBody
-            $futureList = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $futureBody
+            $pastList = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $pastBody
+            $futureList = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $futureBody
             if (-not $pastList.id -or -not $futureList.id) { throw "Past/future daily list creation failed" }
             if ($pastList.id -eq $futureList.id -or $pastList.id -eq $list.id) { throw "Lists on different dates were incorrectly treated as duplicates" }
             $phone = "01000000000"
             $bookingBody = @{ listId=$list.id; patientName="CI Patient"; phone=$phone; contractType="تعاقد"; insurer="تعاقد"; exam="CI Exam"; notes="Automated smoke test"; actor="CI Smoke Test" } | ConvertTo-Json
-            $booking = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $bookingBody
+            $booking = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $bookingBody
             if (-not $booking.patientId) { throw "Booking did not receive a patient ID" }
-            $afterCreate = @(Invoke-RestMethod "http://127.0.0.1:5195/api/v2/bookings")
+            $afterCreate = @(Invoke-RestMethod "http://127.0.0.1:5050/api/v2/bookings")
             $visible = $afterCreate | Where-Object { $_.id -eq $booking.id -and $_.listId -eq $list.id }
             if (-not $visible) { throw "Created booking is not visible inside its daily list" }
             if ($visible.status -ne "محجوز") { throw "Created booking did not start with reserved status" }
             $attendBody = @{ status="تم الحضور"; actor="CI Smoke Test" } | ConvertTo-Json
-            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $attendBody | Out-Null
-            $afterStatus = @(Invoke-RestMethod "http://127.0.0.1:5195/api/v2/bookings")
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $attendBody | Out-Null
+            $afterStatus = @(Invoke-RestMethod "http://127.0.0.1:5050/api/v2/bookings")
             $statusVisible = $afterStatus | Where-Object { $_.id -eq $booking.id -and $_.status -eq "تم الحضور" }
             if (-not $statusVisible) { throw "Booking status change was not visible after reload" }
             $reserveBody = @{ status="محجوز"; actor="CI Smoke Test" } | ConvertTo-Json
-            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $reserveBody | Out-Null
-            $patient = Invoke-RestMethod ("http://127.0.0.1:5195/api/v2/patients/by-phone?phone=" + $phone)
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $reserveBody | Out-Null
+            $patient = Invoke-RestMethod ("http://127.0.0.1:5050/api/v2/patients/by-phone?phone=" + $phone)
             if ($patient.patientId -ne $booking.patientId) { throw "Patient phone lookup did not return the booking patient ID" }
             $badBody = @{ listId=$list.id; patientName="CI Insured"; phone="01000000001"; contractType="تأمين"; insurer=""; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json
             $rejected = $false
-            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $badBody | Out-Null }
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $badBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $rejected = $true } else { throw } }
             if (-not $rejected) { throw "Insured booking without insurer was accepted" }
             $badDoctorBody = @{ date=$testDate; doctor="CI Unregistered Doctor"; shift="مسائي"; actor="CI Smoke Test" } | ConvertTo-Json
             $doctorRejected = $false
-            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $badDoctorBody | Out-Null }
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $badDoctorBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 400) { $doctorRejected = $true } else { throw } }
             if (-not $doctorRejected) { throw "Daily list accepted an unregistered doctor" }
             $stateBody = @{ state="مكتملة"; actor="CI Smoke Test" } | ConvertTo-Json
-            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/lists/" + $list.id + "/state") -ContentType "application/json; charset=utf-8" -Body $stateBody | Out-Null
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/lists/" + $list.id + "/state") -ContentType "application/json; charset=utf-8" -Body $stateBody | Out-Null
             $statusBody = @{ status="تم الحضور"; actor="CI Smoke Test" } | ConvertTo-Json
             $completedRejected = $false
-            try { Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $statusBody | Out-Null }
+            try { Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/bookings/" + $booking.id + "/status") -ContentType "application/json; charset=utf-8" -Body $statusBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $completedRejected = $true } else { throw } }
             if (-not $completedRejected) { throw "Completed daily list allowed booking status mutation" }
             $lockedBookingBody = @{ listId=$list.id; patientName="CI Locked"; phone="01000000002"; contractType="تعاقد"; insurer="تعاقد"; exam="CI Exam"; actor="CI Smoke Test" } | ConvertTo-Json
             $lockedBookingRejected = $false
-            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $lockedBookingBody | Out-Null }
+            try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/bookings" -ContentType "application/json; charset=utf-8" -Body $lockedBookingBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $lockedBookingRejected = $true } else { throw } }
             if (-not $lockedBookingRejected) { throw "Completed daily list accepted a new booking" }
             $reopenBody = @{ state="مفتوحة"; actor="CI Smoke Test" } | ConvertTo-Json
-            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/lists/" + $list.id + "/state") -ContentType "application/json; charset=utf-8" -Body $reopenBody | Out-Null
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/lists/" + $list.id + "/state") -ContentType "application/json; charset=utf-8" -Body $reopenBody | Out-Null
             $targetDate = (Get-Date).Date.AddDays(366).ToString("yyyy-MM-dd")
             $targetBody = @{ date=$targetDate; doctor=$doctor; shift="مسائي"; actor="CI Smoke Test" } | ConvertTo-Json
-            $target = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5195/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $targetBody
+            $target = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5050/api/v2/lists" -ContentType "application/json; charset=utf-8" -Body $targetBody
             $lockTargetBody = @{ state="مقفلة"; actor="CI Smoke Test" } | ConvertTo-Json
-            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/lists/" + $target.id + "/state") -ContentType "application/json; charset=utf-8" -Body $lockTargetBody | Out-Null
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/lists/" + $target.id + "/state") -ContentType "application/json; charset=utf-8" -Body $lockTargetBody | Out-Null
             $moveBody = @{ listId=$target.id; actor="CI Smoke Test" } | ConvertTo-Json
             $moveRejected = $false
-            try { Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/bookings/" + $booking.id + "/move") -ContentType "application/json; charset=utf-8" -Body $moveBody | Out-Null }
+            try { Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/bookings/" + $booking.id + "/move") -ContentType "application/json; charset=utf-8" -Body $moveBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $moveRejected = $true } else { throw } }
             if (-not $moveRejected) { throw "Booking moved into a locked target list" }
             $openTargetBody = @{ state="مفتوحة"; actor="CI Smoke Test" } | ConvertTo-Json
-            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/lists/" + $target.id + "/state") -ContentType "application/json; charset=utf-8" -Body $openTargetBody | Out-Null
-            $moved = Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5195/api/v2/bookings/" + $booking.id + "/move") -ContentType "application/json; charset=utf-8" -Body $moveBody
+            Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/lists/" + $target.id + "/state") -ContentType "application/json; charset=utf-8" -Body $openTargetBody | Out-Null
+            $moved = Invoke-RestMethod -Method Put -Uri ("http://127.0.0.1:5050/api/v2/bookings/" + $booking.id + "/move") -ContentType "application/json; charset=utf-8" -Body $moveBody
             if ($moved.listId -ne $target.id) { throw "Moved booking did not receive target list ID" }
             if ([string]$moved.doctor -ne [string]$target.doctor) { throw "Moved booking doctor does not match target list" }
             if ([string]$moved.shift -ne [string]$target.shift) { throw "Moved booking shift does not match target list" }
             if ((Get-Date $moved.date).Date -ne (Get-Date $target.date).Date) { throw "Moved booking date does not match target list" }
             $deleteBody = @{ reason="CI cleanup verification"; actor="CI Smoke Test" } | ConvertTo-Json
-            Invoke-RestMethod -Method Delete -Uri ("http://127.0.0.1:5195/api/v2/bookings/" + $booking.id) -ContentType "application/json; charset=utf-8" -Body $deleteBody | Out-Null
-            $visibleBookings = @(Invoke-RestMethod "http://127.0.0.1:5195/api/v2/bookings")
+            Invoke-RestMethod -Method Delete -Uri ("http://127.0.0.1:5050/api/v2/bookings/" + $booking.id) -ContentType "application/json; charset=utf-8" -Body $deleteBody | Out-Null
+            $visibleBookings = @(Invoke-RestMethod "http://127.0.0.1:5050/api/v2/bookings")
             if ($visibleBookings | Where-Object { $_.id -eq $booking.id }) { throw "Soft-deleted booking remained visible in normal booking list" }
-            $allBookings = @(Invoke-RestMethod "http://127.0.0.1:5195/api/v2/bookings?includeDeleted=true")
+            $allBookings = @(Invoke-RestMethod "http://127.0.0.1:5050/api/v2/bookings?includeDeleted=true")
             $deleted = $allBookings | Where-Object { $_.id -eq $booking.id }
             if (-not $deleted -or -not $deleted.isDeleted) { throw "Soft-deleted booking was not retained for audit/history storage" }
             $repeatDeleteRejected = $false
-            try { Invoke-RestMethod -Method Delete -Uri ("http://127.0.0.1:5195/api/v2/bookings/" + $booking.id) -ContentType "application/json; charset=utf-8" -Body $deleteBody | Out-Null }
+            try { Invoke-RestMethod -Method Delete -Uri ("http://127.0.0.1:5050/api/v2/bookings/" + $booking.id) -ContentType "application/json; charset=utf-8" -Body $deleteBody | Out-Null }
             catch { if ($_.Exception.Response.StatusCode.value__ -eq 409) { $repeatDeleteRejected = $true } else { throw } }
             if (-not $repeatDeleteRejected) { throw "Repeated booking deletion was accepted" }
             Write-Host "Runtime workflow smoke test passed: admin security, booking flow, validation, list locks, move consistency and soft-delete integrity."
@@ -210,14 +210,14 @@ jobs:
             for ($i = 0; $i -lt 30; $i++) {
               Start-Sleep -Milliseconds 500
               try {
-                $health = Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 2
+                $health = Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 2
                 if ($health.status -eq "ok") { $ready = $true; break }
               } catch {}
               if ($proc.HasExited) { throw "Windows x86 server exited during startup with code $($proc.ExitCode)" }
             }
-            if (-not $ready) { throw "Windows x86 server did not become healthy on port 5195" }
-            $version = Invoke-RestMethod "http://127.0.0.1:5195/api/version"
-            if ($version.version -ne "V187") { throw "Windows x86 server returned wrong version: $($version.version)" }
+            if (-not $ready) { throw "Windows x86 server did not become healthy on port 5050" }
+            $version = Invoke-RestMethod "http://127.0.0.1:5050/api/version"
+            if ($version.version -ne "V188") { throw "Windows x86 server returned wrong version: $($version.version)" }
             Write-Host "Windows x86 runtime server test passed."
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
@@ -231,7 +231,7 @@ jobs:
             $first = $null
             for ($i=0; $i -lt 25; $i++) {
               Start-Sleep -Seconds 1
-              try { $first = Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 2; break } catch {}
+              try { $first = Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 2; break } catch {}
             }
             if (-not $first -or -not $first.pid) { throw "x86 watchdog did not start a healthy server" }
             $firstPid = [int]$first.pid
@@ -240,14 +240,14 @@ jobs:
             for ($i=0; $i -lt 30; $i++) {
               Start-Sleep -Seconds 1
               try {
-                $h = Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 2
+                $h = Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 2
                 if ($h.pid -and [int]$h.pid -ne $firstPid) { $second=$h; break }
               } catch {}
             }
             if (-not $second) { throw "x86 watchdog failed to recover server after forced termination" }
             Write-Host ("x86 watchdog recovery passed: PID {0} -> {1}" -f $firstPid,$second.pid)
           } finally {
-            try { $h=Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 1; if($h.pid){Stop-Process -Id ([int]$h.pid) -Force} } catch {}
+            try { $h=Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 1; if($h.pid){Stop-Process -Id ([int]$h.pid) -Force} } catch {}
             if($wd -and -not $wd.HasExited){Stop-Process -Id $wd.Id -Force}
           }
       - name: Test watchdog automatic server recovery
@@ -259,7 +259,7 @@ jobs:
             $first = $null
             for ($i=0; $i -lt 20; $i++) {
               Start-Sleep -Seconds 1
-              try { $first = Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 2; break } catch {}
+              try { $first = Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 2; break } catch {}
             }
             if (-not $first -or -not $first.pid) { throw "Watchdog did not start a healthy server" }
             $firstPid = [int]$first.pid
@@ -268,14 +268,14 @@ jobs:
             for ($i=0; $i -lt 25; $i++) {
               Start-Sleep -Seconds 1
               try {
-                $h = Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 2
+                $h = Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 2
                 if ($h.pid -and [int]$h.pid -ne $firstPid) { $second=$h; break }
               } catch {}
             }
             if (-not $second) { throw "Watchdog failed to recover server after forced process termination" }
             Write-Host ("Watchdog recovery passed: PID {0} -> {1}" -f $firstPid,$second.pid)
           } finally {
-            try { $h=Invoke-RestMethod "http://127.0.0.1:5195/api/health" -TimeoutSec 1; if($h.pid){Stop-Process -Id ([int]$h.pid) -Force} } catch {}
+            try { $h=Invoke-RestMethod "http://127.0.0.1:5050/api/health" -TimeoutSec 1; if($h.pid){Stop-Process -Id ([int]$h.pid) -Force} } catch {}
             if($wd -and -not $wd.HasExited){Stop-Process -Id $wd.Id -Force}
           }
       - name: Verify package contents

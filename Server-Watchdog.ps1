@@ -1,7 +1,7 @@
-param([int]$Port=5195)
+param([int]$Port=5050)
 $ErrorActionPreference='SilentlyContinue'
 $created=$false
-$mutex=New-Object System.Threading.Mutex($true,'Global\UltrasoundBookingSystemWatchdog5195',[ref]$created)
+$mutex=New-Object System.Threading.Mutex($true,'Global\UltrasoundBookingSystemWatchdog5050',[ref]$created)
 if(!$created){ exit 0 }
 $root=Split-Path -Parent $MyInvocation.MyCommand.Path
 $exe=Join-Path $root 'UltrasoundBookingSystem.exe'

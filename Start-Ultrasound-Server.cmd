@@ -24,12 +24,12 @@ echo       ULTRASOUND BOOKING SYSTEM - SERVER
 echo ==================================================
 echo.
 echo Server watchdog is active with automatic restart.
-echo Local: http://localhost:5195
-echo LAN:   http://%LANIP%:5195
+echo Local: http://localhost:5050
+echo LAN:   http://%LANIP%:5050
 echo.
 echo You may close this window. The watchdog keeps running.
 echo To enable startup with Windows, run Install-AutoStart.cmd once as Administrator.
 echo.
-start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:5195'"
+start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:5050'"
 timeout /t 4 /nobreak >nul
 exit /b 0
